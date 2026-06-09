@@ -143,7 +143,6 @@ async function sendGift(fromUsername, toUsername, item) {
     const key = `gift:${toUsername}:${Date.now()}`;
     const gift = { from: fromUsername, item, sentAt: Date.now() };
     await window.storage.set(key, JSON.stringify(gift), true);
-< truncated lines 146-785 >
                             ? <div style={{fontSize:10,color:"#aaa"}}>Lv {p.level} — {p.title}</div>
                             : <div style={{fontSize:10,color:"#555"}}>Tocca per caricare profilo</div>}
                         </div>
