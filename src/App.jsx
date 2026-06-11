@@ -12,15 +12,27 @@ const AVATARS = [
 
 const RARITY_COLORS = { Common:"#aaa", Uncommon:"#4CAF50", Rare:"#2196F3", Epic:"#9C27B0", Legendary:"#FF9800" };
 const RARITY_ORDER  = ["Common","Uncommon","Rare","Epic","Legendary"];
+const GEAR_SLOTS    = ["Sword","Helmet","Chest","Boots","Leggings","Gloves"];
+const GEAR_EMOJI    = { Sword:"⚔️", Helmet:"⛑️", Chest:"🧥", Boots:"👟", Leggings:"🩲", Gloves:"🥊" };
+const GEAR_DAMAGE   = { Common:1, Uncommon:2, Rare:3, Epic:4, Legendary:5 };
+const GEAR_CRIT     = { Common:0, Uncommon:0, Rare:0, Epic:0, Legendary:5 };
 
-const GEAR_SLOTS = ["Sword","Helmet","Chest","Boots","Leggings","Gloves"];
-const GEAR_EMOJI = { Sword:"⚔️", Helmet:"⛑️", Chest:"🧥", Boots:"👟", Leggings:"🩲", Gloves:"🥊" };
+const MAX_ENERGY    = 60;
+const ENERGY_REGEN  = 10 * 60 * 1000; // 10 min in ms
 
-const GEAR_DAMAGE = { Common:1, Uncommon:2, Rare:3, Epic:4, Legendary:5 };
-const GEAR_CRIT   = { Common:0, Uncommon:0, Rare:0, Epic:0, Legendary:5 };
-
-const MAX_ENERGY   = 60;
-const ENERGY_REGEN = 10 * 60 * 1000; // 10 min in ms
+// Drop rates: 20% item, 80% energy (energy amounts reduced 25%)
+function getBossDrops(playerLevel) {
+  const r = Math.random() * 100;
+  if (r < 20) {
+    return { type:"item", rarity:getItemRarity(playerLevel) };
+  }
+  // 80% energy, reduced amounts
+  const a = Math.random() * 100;
+  if (a < 5)  return { type:"attacks", amount:15 }; // was 20
+  if (a < 20) return { type:"attacks", amount:11 }; // was 15
+  if (a < 40) return { type:"attacks", amount:7  }; // was 10
+  return       { type:"attacks", amount:4  };        // was 6
+}
 
 function getItemRarity(playerLevel) {
   const r = Math.random() * 100;
@@ -49,26 +61,10 @@ function getItemRarity(playerLevel) {
   return "Common";
 }
 
-function getBossDrops(playerLevel) {
-  const r = Math.random() * 100;
-  // 90% attacks, 10% item
-  if (r < 10) {
-    return { type: "item", rarity: getItemRarity(playerLevel) };
-  }
-  // attack drops
-  const a = Math.random() * 100;
-  if (a < 5)  return { type: "attacks", amount: 20 };
-  if (a < 20) return { type: "attacks", amount: 15 };
-  if (a < 40) return { type: "attacks", amount: 10 };
-  return       { type: "attacks", amount: 6 };
-}
-
-function getLevel(xp) { return Math.floor(Math.pow(xp / 100, 0.6)) + 1; }
+function getLevel(xp) { return Math.floor(Math.pow(xp/100,0.6))+1; }
 function xpInfo(xp) {
-  const l = getLevel(xp);
-  const n = Math.pow(l, 1/0.6) * 100;
-  const p = Math.pow(l-1, 1/0.6) * 100;
-  return { progress: Math.floor(xp-p), total: Math.floor(n-p) };
+  const l=getLevel(xp), n=Math.pow(l,1/0.6)*100, p=Math.pow(l-1,1/0.6)*100;
+  return { progress:Math.floor(xp-p), total:Math.floor(n-p) };
 }
 
 const TITLES = [
@@ -81,61 +77,79 @@ const TITLES = [
 ];
 function getTitle(xp) { let t=TITLES[0]; for(const x of TITLES) if(xp>=x.threshold) t=x; return t.title; }
 
+function calcEnergy(state) {
+  const now     = Date.now();
+  const elapsed = now - (state.lastEnergyTime||now);
+  const regen   = Math.floor(elapsed/ENERGY_REGEN);
+  return Math.min(MAX_ENERGY, (state.energy||0)+regen);
+}
+
+function getNextEnergyMs(state) {
+  const elapsed  = Date.now() - (state.lastEnergyTime||Date.now());
+  const nextRegen = ENERGY_REGEN - (elapsed % ENERGY_REGEN);
+  return nextRegen;
+}
+
+function formatTime(ms) {
+  const totalSec = Math.ceil(ms/1000);
+  const m = Math.floor(totalSec/60);
+  const s = totalSec%60;
+  return `${m}:${s.toString().padStart(2,"0")}`;
+}
+
+function formatFullTime(ms) {
+  const totalSec = Math.ceil(ms/1000);
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = totalSec%60;
+  if (h>0) return `${h}h ${m}m`;
+  if (m>0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 const initialState = {
-  username: "", avatar: null,
-  totalXp: 0, tokens: 0,
-  streak: 0, lastDay: null,
-  bossIndex: 1, // current boss number (= boss HP)
-  gear: { Sword:null, Helmet:null, Chest:null, Boots:null, Leggings:null, Gloves:null },
-  inventory: [],
-  energy: MAX_ENERGY,
-  lastEnergyTime: Date.now(),
-  log: [],
-  friends: [], inbox: [],
+  username:"", avatar:null,
+  totalXp:0, tokens:0,
+  streak:0, lastDay:null,
+  bossIndex:1,
+  gear:{ Sword:null, Helmet:null, Chest:null, Boots:null, Leggings:null, Gloves:null },
+  inventory:[],
+  energy:MAX_ENERGY,
+  lastEnergyTime:Date.now(),
+  log:[],
+  friends:[], inbox:[],
 };
 
 function loadLocal() {
-  try { const s=localStorage.getItem("tq_v1"); return s?{...initialState,...JSON.parse(s)}:initialState; }
+  try { const s=localStorage.getItem("tq_v2"); return s?{...initialState,...JSON.parse(s)}:initialState; }
   catch { return initialState; }
 }
-function saveLocal(s) { try { localStorage.setItem("tq_v1",JSON.stringify(s)); } catch{} }
+function saveLocal(s) { try { localStorage.setItem("tq_v2",JSON.stringify(s)); } catch{} }
 
 function getEquippedDamage(gear) {
-  const sword = gear?.Sword;
-  if (!sword) return 0;
-  return GEAR_DAMAGE[sword.rarity] || 0;
+  const sword=gear?.Sword;
+  return sword ? (GEAR_DAMAGE[sword.rarity]||0) : 0;
 }
 
 function getEquippedCrit(gear) {
-  let crit = 0;
   if (!gear) return 0;
-  Object.values(gear).forEach(item => {
-    if (item) crit += (GEAR_CRIT[item.rarity] || 0);
-  });
-  return crit;
-}
-
-function calcEnergy(state) {
-  const now = Date.now();
-  const elapsed = now - (state.lastEnergyTime || now);
-  const regen = Math.floor(elapsed / ENERGY_REGEN);
-  return Math.min(MAX_ENERGY, (state.energy || 0) + regen);
+  return Object.values(gear).reduce((acc,item)=>acc+(item?GEAR_CRIT[item.rarity]||0:0),0);
 }
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
 
 async function pushProfile(state) {
   if (!state.username) return;
   const profile = {
-    username: state.username, avatar: state.avatar,
-    level: getLevel(state.totalXp), totalXp: state.totalXp,
-    tokens: state.tokens, streak: state.streak,
-    title: getTitle(state.totalXp),
-    bossIndex: state.bossIndex,
-    gear: state.gear,
-    inventory: state.inventory.slice(-6),
-    updatedAt: Date.now(),
+    username:state.username, avatar:state.avatar,
+    level:getLevel(state.totalXp), totalXp:state.totalXp,
+    tokens:state.tokens, streak:state.streak,
+    title:getTitle(state.totalXp),
+    bossIndex:state.bossIndex,
+    gear:state.gear,
+    inventory:state.inventory.slice(-6),
+    updatedAt:Date.now(),
   };
-  await window.storage.set(`tq:${state.username}`, JSON.stringify(profile), true);
+  try { await window.storage.set(`tq:${state.username}`,JSON.stringify(profile),true); } catch{}
 }
 
 async function fetchProfile(username) {
@@ -145,27 +159,27 @@ async function fetchProfile(username) {
 
 async function fetchLeaderboard() {
   try {
-    const r = await window.storage.list("tq:", true);
+    const r=await window.storage.list("tq:",true);
     if (!r?.keys?.length) return [];
-    const profiles = await Promise.all(r.keys.map(async k => {
+    const profiles=await Promise.all(r.keys.map(async k=>{
       try { const v=await window.storage.get(k,true); return v?JSON.parse(v.value):null; } catch{return null;}
     }));
     return profiles.filter(Boolean).sort((a,b)=>b.totalXp-a.totalXp).slice(0,20);
   } catch { return []; }
 }
 
-async function sendGift(from, to, item) {
+async function sendGift(from,to,item) {
   try {
-    await window.storage.set(`gift:${to}:${Date.now()}`, JSON.stringify({from,item,sentAt:Date.now()}), true);
+    await window.storage.set(`gift:${to}:${Date.now()}`,JSON.stringify({from,item,sentAt:Date.now()}),true);
     return true;
   } catch { return false; }
 }
 
 async function fetchInbox(username) {
   try {
-    const r = await window.storage.list(`gift:${username}:`, true);
+    const r=await window.storage.list(`gift:${username}:`,true);
     if (!r?.keys?.length) return [];
-    const gifts = await Promise.all(r.keys.map(async k => {
+    const gifts=await Promise.all(r.keys.map(async k=>{
       try { const v=await window.storage.get(k,true); return v?{...JSON.parse(v.value),key:k}:null; } catch{return null;}
     }));
     return gifts.filter(Boolean).sort((a,b)=>b.sentAt-a.sentAt);
@@ -196,26 +210,35 @@ function RarityBadge({rarity}) {
     color:RARITY_COLORS[rarity]}}>{rarity}</span>;
 }
 
-function EnergyBar({current,max}) {
-  const pct = (current/max)*100;
+function EnergyBar({current,max,nextMs,fullMs}) {
+  const pct   = (current/max)*100;
   const color = pct>60?"#22c55e":pct>30?"#f59e0b":"#ef4444";
   return (
     <div style={{marginBottom:8}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#aaa",marginBottom:2}}>
-        <span style={{color:"#22c55e",fontWeight:700}}>⚡ Energy</span>
-        <span style={{color:"#fff",fontWeight:700}}>{current}/{max}</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+        <span style={{fontSize:10,color:"#22c55e",fontWeight:700}}>⚡ Energy</span>
+        <span style={{fontSize:10,color:"#fff",fontWeight:700}}>{current}/{max}</span>
       </div>
       <div style={{background:"#1a1a2e",borderRadius:6,height:10,overflow:"hidden",border:"1px solid #222"}}>
-        <div style={{width:`${pct}%`,background:color,height:"100%",borderRadius:6,transition:"width 0.3s",
-          boxShadow:`0 0 6px ${color}60`}}/>
+        <div style={{width:`${pct}%`,background:color,height:"100%",borderRadius:6,
+          transition:"width 0.3s",boxShadow:`0 0 6px ${color}60`}}/>
       </div>
-      {current<max&&<div style={{fontSize:9,color:"#555",marginTop:2}}>+1 every 10 min</div>}
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+        {current<max ? (
+          <>
+            <span style={{fontSize:9,color:"#555"}}>+1 in {formatTime(nextMs)}</span>
+            <span style={{fontSize:9,color:"#555"}}>full in {formatFullTime(fullMs)}</span>
+          </>
+        ) : (
+          <span style={{fontSize:9,color:"#22c55e"}}>⚡ Energy full!</span>
+        )}
+      </div>
     </div>
   );
 }
 
 function BossHPBar({current,max,name,emoji}) {
-  const pct = (current/max)*100;
+  const pct   = (current/max)*100;
   const color = pct>50?"#ef4444":pct>25?"#f59e0b":"#22c55e";
   return (
     <div style={{marginBottom:8}}>
@@ -250,56 +273,55 @@ function GearSlot({slot,item,onEquip}) {
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function TokenQuest() {
-  const [state, setState] = useState(loadLocal);
+  const [state, setState]   = useState(loadLocal);
   const [screen, setScreen] = useState(state.username?"main":"register");
-  const [regName, setRegName] = useState("");
+  const [regName, setRegName]     = useState("");
   const [regAvatar, setRegAvatar] = useState(null);
-  const [regError, setRegError] = useState("");
+  const [regError, setRegError]   = useState("");
 
   // Combat
-  const [bossHp, setBossHp] = useState(null);
-  const [combatLog, setCombatLog] = useState([]);
-  const [combatResult, setCombatResult] = useState(null); // null|"victory"|"defeat"
-  const [dropResult, setDropResult] = useState(null);
-  const [showDrop, setShowDrop] = useState(false);
+  const [bossHp, setBossHp]               = useState(null);
+  const [combatLog, setCombatLog]         = useState([]);
+  const [combatResult, setCombatResult]   = useState(null);
+  const [dropResult, setDropResult]       = useState(null);
+  const [showDrop, setShowDrop]           = useState(false);
 
   // Social
-  const [socialTab, setSocialTab] = useState("leaderboard");
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [loadingLB, setLoadingLB] = useState(false);
-  const [friendInput, setFriendInput] = useState("");
+  const [socialTab, setSocialTab]         = useState("leaderboard");
+  const [leaderboard, setLeaderboard]     = useState([]);
+  const [loadingLB, setLoadingLB]         = useState(false);
+  const [friendInput, setFriendInput]     = useState("");
   const [friendProfiles, setFriendProfiles] = useState({});
-  const [inbox, setInbox] = useState([]);
-  const [loadingInbox, setLoadingInbox] = useState(false);
-  const [giftTarget, setGiftTarget] = useState(null);
-  const [giftSending, setGiftSending] = useState(false);
-  const [giftMsg, setGiftMsg] = useState("");
-  const [viewProfile, setViewProfile] = useState(null);
+  const [inbox, setInbox]                 = useState([]);
+  const [loadingInbox, setLoadingInbox]   = useState(false);
+  const [giftTarget, setGiftTarget]       = useState(null);
+  const [giftSending, setGiftSending]     = useState(false);
+  const [giftMsg, setGiftMsg]             = useState("");
+  const [viewProfile, setViewProfile]     = useState(null);
 
   // Inventory
   const [showInventory, setShowInventory] = useState(false);
-  const [equipFrom, setEquipFrom] = useState(null); // item to equip
+  const [equipFrom, setEquipFrom]         = useState(null);
 
   // Ad simulation
   const [watchingAd, setWatchingAd] = useState(false);
-  const [adTimer, setAdTimer] = useState(0);
+  const [adTimer, setAdTimer]       = useState(0);
   const adRef = useRef(null);
 
-  // Energy regen ticker
-  const [energy, setEnergy] = useState(() => calcEnergy(loadLocal()));
+  // Energy timer tick
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => {
-      setEnergy(calcEnergy(state));
-      setState(prev => {
-        const newEnergy = calcEnergy(prev);
-        if (newEnergy !== prev.energy) {
-          return { ...prev, energy: newEnergy, lastEnergyTime: Date.now() };
-        }
-        return prev;
-      });
-    }, 10000);
-    return () => clearInterval(interval);
+    const t = setInterval(()=>setTick(p=>p+1), 1000);
+    return ()=>clearInterval(t);
   }, []);
+
+  // Energy regen
+  useEffect(() => {
+    const current = calcEnergy(state);
+    if (current !== state.energy) {
+      setState(prev=>({...prev, energy:current, lastEnergyTime:Date.now()}));
+    }
+  }, [tick]);
 
   useEffect(() => {
     saveLocal(state);
@@ -310,130 +332,105 @@ export default function TokenQuest() {
     if (screen==="social") { loadLeaderboard(); loadInbox(); }
   }, [screen]);
 
-  // Init boss HP when entering combat
   useEffect(() => {
-    if (screen==="main" && bossHp===null) {
-      setBossHp(state.bossIndex);
-    }
+    if (screen==="main" && bossHp===null) setBossHp(state.bossIndex);
   }, [screen]);
 
-  const level = getLevel(state.totalXp);
-  const xi = xpInfo(state.totalXp);
-  const title = getTitle(state.totalXp);
-  const avatar = AVATARS.find(a=>a.id===state.avatar) || AVATARS[0];
+  const level       = getLevel(state.totalXp);
+  const xi          = xpInfo(state.totalXp);
+  const title       = getTitle(state.totalXp);
+  const avatar      = AVATARS.find(a=>a.id===state.avatar)||AVATARS[0];
   const currentEnergy = calcEnergy(state);
+  const nextMs      = getNextEnergyMs(state);
+  const fullMs      = (MAX_ENERGY - currentEnergy) * ENERGY_REGEN - (Date.now() - (state.lastEnergyTime||Date.now())) % ENERGY_REGEN;
   const swordDamage = getEquippedDamage(state.gear);
-  const critChance = getEquippedCrit(state.gear);
-  const totalDamage = 1 + swordDamage; // STR always 1 for now
+  const critChance  = getEquippedCrit(state.gear);
+  const totalDamage = 1 + swordDamage;
 
-  // ── Registration ─────────────────────────────────────────────────────────
+  // ── Registration ──────────────────────────────────────────────────────────
   async function handleRegister() {
     const name = regName.trim();
-    if (!name||name.length<2) { setRegError("At least 2 characters!"); return; }
-    if (name.length>20) { setRegError("Max 20 characters!"); return; }
+    if (!name||name.length<2)          { setRegError("At least 2 characters!"); return; }
+    if (name.length>20)                 { setRegError("Max 20 characters!"); return; }
     if (!/^[a-zA-Z0-9_]+$/.test(name)) { setRegError("Only letters, numbers and _"); return; }
-    if (!regAvatar) { setRegError("Choose your avatar!"); return; }
+    if (!regAvatar)                     { setRegError("Choose your avatar!"); return; }
     const existing = await fetchProfile(name);
     if (existing) { setRegError("Username taken! Choose another."); return; }
-    const newState = { ...initialState, username:name, avatar:regAvatar, energy:MAX_ENERGY, lastEnergyTime:Date.now() };
-    setState(newState);
-    saveLocal(newState);
-    setScreen("main");
-    setBossHp(1);
+    const newState = {...initialState, username:name, avatar:regAvatar, energy:MAX_ENERGY, lastEnergyTime:Date.now()};
+    setState(newState); saveLocal(newState);
+    setScreen("main"); setBossHp(1);
   }
 
   // ── Combat ────────────────────────────────────────────────────────────────
   function attack() {
-    if (currentEnergy < 1) return;
-    if (combatResult) return;
-
+    if (currentEnergy<1||combatResult) return;
     const isCrit = Math.random()*100 < critChance;
-    const dmg = isCrit ? totalDamage*2 : totalDamage;
-    const newHp = Math.max(0, bossHp - dmg);
-
-    const logLine = isCrit
-      ? `💥 CRITICAL HIT! ${dmg} damage!`
-      : `⚔️ You deal ${dmg} damage!`;
-
-    setCombatLog(prev=>[logLine,...prev.slice(0,4)]);
+    const dmg    = isCrit ? totalDamage*2 : totalDamage;
+    const newHp  = Math.max(0, bossHp-dmg);
+    setCombatLog(prev=>[isCrit?`💥 CRITICAL! ${dmg} damage!`:`⚔️ ${dmg} damage dealt!`,...prev.slice(0,4)]);
     setBossHp(newHp);
+    setState(prev=>({...prev, energy:Math.max(0,calcEnergy(prev)-1), lastEnergyTime:Date.now()}));
 
-    // update energy
-    const newEnergy = Math.max(0, currentEnergy - 1);
-    setState(prev=>({
-      ...prev,
-      energy: newEnergy,
-      lastEnergyTime: newEnergy === prev.energy ? prev.lastEnergyTime : Date.now(),
-    }));
-
-    if (newHp <= 0) {
-      // Boss defeated!
-      const xpGain = state.bossIndex * 10;
-      const drop = getBossDrops(level);
-      setDropResult(drop);
-
+    if (newHp<=0) {
+      const xpGain = state.bossIndex*10;
+      const drop   = getBossDrops(level);
       let newInventory = [...(state.inventory||[])];
-      let newGear = {...state.gear};
-      let newEnergy2 = newEnergy;
+      let extraEnergy  = 0;
+      let droppedItem  = null;
 
       if (drop.type==="attacks") {
-        newEnergy2 = Math.min(MAX_ENERGY, newEnergy + drop.amount);
-      } else if (drop.type==="item") {
-        const slot = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
-        const newItem = {
-          id: Date.now(),
-          slot, rarity: drop.rarity,
-          emoji: GEAR_EMOJI[slot],
-          name: `${drop.rarity} ${slot}`,
-          date: new Date().toLocaleDateString("en"),
+        extraEnergy = drop.amount;
+      } else {
+        const slot    = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
+        droppedItem   = {
+          id:Date.now(), slot, rarity:drop.rarity,
+          emoji:GEAR_EMOJI[slot],
+          name:`${drop.rarity} ${slot}`,
+          date:new Date().toLocaleDateString("en"),
         };
-        newInventory = [...newInventory.slice(-29), newItem];
-        setDropResult({...drop, item: newItem});
+        newInventory = [...newInventory.slice(-29), droppedItem];
+        drop.item = droppedItem;
       }
+
+      setDropResult(drop);
+      setShowDrop(true);
+      setCombatResult("victory");
 
       setState(prev=>({
         ...prev,
-        totalXp: prev.totalXp + xpGain,
-        tokens: prev.tokens + state.bossIndex,
-        bossIndex: prev.bossIndex + 1,
+        totalXp:   prev.totalXp+xpGain,
+        tokens:    prev.tokens+1,
+        bossIndex: prev.bossIndex+1,
         inventory: newInventory,
-        gear: newGear,
-        energy: newEnergy2,
+        energy:    Math.min(MAX_ENERGY, Math.max(0,calcEnergy(prev)-1)+extraEnergy),
         lastEnergyTime: Date.now(),
-        log: [...(prev.log||[]).slice(-20),
-          `Boss #${state.bossIndex} defeated! +${xpGain} XP`],
+        log:[...(prev.log||[]).slice(-20), `Boss #${state.bossIndex} defeated! +${xpGain} XP +1 token`],
       }));
-
-      setCombatResult("victory");
-      setShowDrop(true);
       setBossHp(state.bossIndex+1);
     }
   }
 
   function nextBoss() {
-    setCombatResult(null);
-    setCombatLog([]);
-    setShowDrop(false);
-    setDropResult(null);
+    setCombatResult(null); setCombatLog([]);
+    setShowDrop(false);    setDropResult(null);
     setBossHp(state.bossIndex);
   }
 
   // ── Watch Ad ──────────────────────────────────────────────────────────────
   function startWatchAd() {
-    if (watchingAd) return;
-    setWatchingAd(true);
-    setAdTimer(30);
-    adRef.current = setInterval(() => {
-      setAdTimer(prev => {
-        if (prev <= 1) {
+    if (watchingAd||currentEnergy>=MAX_ENERGY) return;
+    setWatchingAd(true); setAdTimer(30);
+    adRef.current = setInterval(()=>{
+      setAdTimer(prev=>{
+        if (prev<=1) {
           clearInterval(adRef.current);
           setWatchingAd(false);
-          setState(p=>({...p, energy:Math.min(MAX_ENERGY,calcEnergy(p)+10)}));
+          setState(p=>({...p, energy:Math.min(MAX_ENERGY,calcEnergy(p)+1)}));
           return 0;
         }
         return prev-1;
       });
-    }, 1000);
+    },1000);
   }
 
   // ── Leaderboard ───────────────────────────────────────────────────────────
@@ -451,10 +448,10 @@ export default function TokenQuest() {
   }
 
   async function addFriend() {
-    const name = friendInput.trim();
+    const name=friendInput.trim();
     if (!name||name===state.username) return;
     if ((state.friends||[]).includes(name)) return;
-    const p = await fetchProfile(name);
+    const p=await fetchProfile(name);
     if (!p) { alert("User not found!"); return; }
     setState(prev=>({...prev,friends:[...(prev.friends||[]),name]}));
     setFriendProfiles(prev=>({...prev,[name]:p}));
@@ -462,20 +459,20 @@ export default function TokenQuest() {
   }
 
   async function loadFriendProfile(name) {
-    const p = await fetchProfile(name);
+    const p=await fetchProfile(name);
     if (p) { setFriendProfiles(prev=>({...prev,[name]:p})); setViewProfile(p); setScreen("viewProfile"); }
   }
 
   async function doSendGift(toUsername) {
-    if (state.tokens<100) { setGiftMsg("Need at least 100 tokens!"); return; }
+    if (state.tokens<100) { setGiftMsg("Need 100 tokens!"); return; }
     setGiftSending(true);
-    const inv = state.inventory.filter(i=>i);
+    const inv=(state.inventory||[]).filter(i=>i);
     if (!inv.length) { setGiftMsg("No items to send!"); setGiftSending(false); return; }
-    const item = inv[Math.floor(Math.random()*inv.length)];
-    const ok = await sendGift(state.username, toUsername, item);
+    const item=inv[Math.floor(Math.random()*inv.length)];
+    const ok=await sendGift(state.username,toUsername,item);
     if (ok) {
       setState(prev=>({...prev,tokens:prev.tokens-100}));
-      setGiftMsg(`🎁 Gift sent to ${toUsername}!`);
+      setGiftMsg(`🎁 Sent to ${toUsername}!`);
     } else { setGiftMsg("Error. Try again."); }
     setGiftSending(false);
     setTimeout(()=>setGiftMsg(""),3000);
@@ -484,8 +481,10 @@ export default function TokenQuest() {
   async function claimGift(gift) {
     await deleteGift(gift.key);
     setInbox(prev=>prev.filter(g=>g.key!==gift.key));
-    setState(prev=>({...prev,inventory:[...(prev.inventory||[]).slice(-29),{...gift.item,date:new Date().toLocaleDateString("en"),gift:true}]}));
-    alert(`🎁 You received: ${gift.item.name} from ${gift.from}!`);
+    setState(prev=>({...prev,
+      inventory:[...(prev.inventory||[]).slice(-29),{...gift.item,date:new Date().toLocaleDateString("en"),gift:true}]
+    }));
+    alert(`🎁 Received: ${gift.item?.name} from ${gift.from}!`);
   }
 
   function equipItem(item) {
@@ -499,25 +498,21 @@ export default function TokenQuest() {
     @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
     @keyframes slideIn{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
     @keyframes glow{0%,100%{box-shadow:0 0 8px #f59e0b30}50%{box-shadow:0 0 20px #f59e0b70}}
-    @keyframes victoryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
     .btn{cursor:pointer;border:none;border-radius:8px;font-family:Georgia,serif;font-weight:700;transition:all 0.2s}
     .btn:hover{transform:translateY(-2px);filter:brightness(1.15)}
-    .btn:active{transform:translateY(0);transform:scale(0.97)}
-    .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+    .btn:active{transform:translateY(0)}
+    .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;filter:none}
     .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;backdrop-filter:blur(4px)}
     .tab{cursor:pointer;padding:7px 12px;border-radius:8px;font-size:12px;font-family:Georgia,serif;font-weight:700;border:none;transition:all 0.2s}
     input{background:#0d0d2b;border:1px solid #333;border-radius:8px;padding:9px 12px;color:#fde68a;font-family:Georgia,serif;outline:none;width:100%;box-sizing:border-box}
     input::placeholder{color:#444}
-    .attack-btn{animation:none}
-    .attack-btn:active{animation:shake 0.2s ease}
   `;
 
   const wrap = {
     minHeight:"100vh",
     background:"linear-gradient(135deg,#0a0a1a 0%,#0d0d2b 50%,#0a0a1a 100%)",
     fontFamily:"Georgia,serif",color:"#e8e0d0",
-    padding:"12px 12px 80px 12px",
-    position:"relative",overflow:"hidden",
+    padding:"12px 12px 80px 12px",position:"relative",overflow:"hidden",
   };
 
   const stars = (
@@ -533,7 +528,7 @@ export default function TokenQuest() {
   function BottomNav() {
     return (
       <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,
-        display:"flex",gap:0,background:"rgba(5,5,20,0.95)",
+        display:"flex",background:"rgba(5,5,20,0.97)",
         borderTop:"1px solid #222",padding:"6px 12px 10px"}}>
         {[
           {key:"main",   emoji:"⚔️", label:"Fight"},
@@ -563,7 +558,6 @@ export default function TokenQuest() {
           <h1 style={{color:"#fde68a",textShadow:"0 0 20px #f59e0b80",margin:"6px 0 4px",fontSize:26}}>CREATE HERO</h1>
           <div style={{color:"#aaa",fontSize:12}}>Choose your name and class</div>
         </div>
-
         <div className="card" style={{marginBottom:12}}>
           <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>👤 Username</div>
           <input value={regName} onChange={e=>{setRegName(e.target.value);setRegError("");}}
@@ -572,7 +566,6 @@ export default function TokenQuest() {
           {regError&&<div style={{color:"#ef4444",fontSize:11,marginBottom:6}}>⚠️ {regError}</div>}
           <div style={{fontSize:9,color:"#555"}}>Letters, numbers and _ only.</div>
         </div>
-
         <div className="card" style={{marginBottom:16}}>
           <div style={{fontSize:11,color:"#aaa",marginBottom:10}}>🎭 Choose your class</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
@@ -580,8 +573,7 @@ export default function TokenQuest() {
               <div key={av.id} onClick={()=>setRegAvatar(av.id)} style={{
                 textAlign:"center",padding:"10px 6px",borderRadius:10,cursor:"pointer",
                 background:regAvatar===av.id?`${av.color}20`:"rgba(255,255,255,0.02)",
-                border:`2px solid ${regAvatar===av.id?av.color:"#333"}`,
-                transition:"all 0.2s",
+                border:`2px solid ${regAvatar===av.id?av.color:"#333"}`,transition:"all 0.2s",
               }}>
                 <div style={{fontSize:28}}>{av.emoji}</div>
                 <div style={{fontSize:10,fontWeight:700,color:regAvatar===av.id?av.color:"#aaa",marginTop:4}}>{av.name}</div>
@@ -589,7 +581,6 @@ export default function TokenQuest() {
             ))}
           </div>
         </div>
-
         <button className="btn" onClick={handleRegister} style={{
           width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",
           color:"#000",padding:"13px",fontSize:15,
@@ -597,6 +588,7 @@ export default function TokenQuest() {
       </div>
     </div>
   );
+
   // ── MAIN FIGHT SCREEN ─────────────────────────────────────────────────────
   if (screen==="main") return (
     <div style={wrap}>
@@ -607,22 +599,24 @@ export default function TokenQuest() {
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:28,background:`${avatar.color}20`,borderRadius:"50%",width:42,height:42,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${avatar.color}60`}}>{avatar.emoji}</div>
+            <div style={{fontSize:26,background:`${avatar.color}20`,borderRadius:"50%",
+              width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",
+              border:`2px solid ${avatar.color}60`}}>{avatar.emoji}</div>
             <div>
-              <div style={{fontSize:10,color:"#f59e0b",letterSpacing:2}}>TOKEN QUEST</div>
-              <div style={{fontSize:16,fontWeight:700,color:"#fde68a"}}>{state.username}</div>
+              <div style={{fontSize:9,color:"#f59e0b",letterSpacing:2}}>TOKEN QUEST</div>
+              <div style={{fontSize:15,fontWeight:700,color:"#fde68a"}}>{state.username}</div>
               <div style={{fontSize:9,color:"#a78bfa",fontStyle:"italic"}}>{title}</div>
             </div>
           </div>
           <div style={{textAlign:"right"}}>
-            <div style={{fontSize:11,color:"#fde68a",fontWeight:700}}>Lv {level}</div>
-            <div style={{fontSize:10,color:"#aaa"}}>🪙 {state.tokens} tokens</div>
+            <div style={{fontSize:12,color:"#fde68a",fontWeight:700}}>Lv {level}</div>
             <div style={{fontSize:10,color:"#f59e0b"}}>Boss #{state.bossIndex}</div>
+            <div style={{fontSize:10,color:"#aaa"}}>🪙 {state.tokens} tokens</div>
           </div>
         </div>
 
         {/* XP Bar */}
-        <div style={{marginBottom:10}}>
+        <div style={{marginBottom:8}}>
           <div style={{background:"#1a1a2e",borderRadius:6,height:7,overflow:"hidden",border:"1px solid #222"}}>
             <div style={{width:`${Math.min(100,(xi.progress/xi.total)*100)}%`,
               background:"linear-gradient(90deg,#f59e0b,#ef4444)",
@@ -632,22 +626,22 @@ export default function TokenQuest() {
         </div>
 
         {/* Energy */}
-        <EnergyBar current={currentEnergy} max={MAX_ENERGY}/>
+        <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={Math.max(0,fullMs)}/>
 
         {/* Boss Card */}
         {bossHp!==null&&(
           <div className="card" style={{marginBottom:10,border:"1px solid #ef444425",background:"rgba(239,68,68,0.04)"}}>
             <BossHPBar
               current={combatResult==="victory"?0:bossHp}
-              max={state.bossIndex}
-              name={`Boss #${state.bossIndex}`}
-              emoji={["👹","💀","🧌","🧛","👿","🌑","😈","☠️"][state.bossIndex%8]}
+              max={state.bossIndex-(combatResult==="victory"?1:0)}
+              name={`Boss #${state.bossIndex-(combatResult==="victory"?1:0)}`}
+              emoji={["👹","💀","🧌","🧛","👿","🌑","😈","☠️"][(state.bossIndex-(combatResult==="victory"?1:0))%8]}
             />
 
             {/* Combat Log */}
-            <div style={{minHeight:60,marginBottom:10}}>
-              {combatLog.length===0&&!combatResult&&(
-                <div style={{textAlign:"center",color:"#555",fontSize:11,padding:"10px 0"}}>Attack the boss!</div>
+            <div style={{minHeight:50,marginBottom:10}}>
+              {!combatLog.length&&!combatResult&&(
+                <div style={{textAlign:"center",color:"#555",fontSize:11,padding:"8px 0"}}>Attack the boss!</div>
               )}
               {combatLog.map((line,i)=>(
                 <div key={i} style={{fontSize:11,color:i===0?"#fde68a":"#555",marginBottom:2,
@@ -655,17 +649,19 @@ export default function TokenQuest() {
               ))}
             </div>
 
-            {/* Victory/Drop */}
+            {/* Drop result */}
             {combatResult==="victory"&&showDrop&&dropResult&&(
               <div style={{marginBottom:10,padding:10,background:"rgba(34,197,94,0.08)",
                 border:"1px solid #22c55e30",borderRadius:8,animation:"slideIn 0.3s ease",textAlign:"center"}}>
-                <div style={{fontSize:13,color:"#22c55e",fontWeight:700,marginBottom:4}}>⚔️ VICTORY!</div>
+                <div style={{fontSize:13,color:"#22c55e",fontWeight:700,marginBottom:4}}>
+                  ⚔️ VICTORY! +{(state.bossIndex-1)*10} XP +1 🪙
+                </div>
                 {dropResult.type==="attacks"&&(
-                  <div style={{fontSize:12,color:"#f59e0b"}}>⚡ +{dropResult.amount} energy dropped!</div>
+                  <div style={{fontSize:12,color:"#f59e0b"}}>⚡ +{dropResult.amount} energy!</div>
                 )}
                 {dropResult.type==="item"&&dropResult.item&&(
                   <div>
-                    <div style={{fontSize:20}}>{dropResult.item.emoji}</div>
+                    <div style={{fontSize:22}}>{dropResult.item.emoji}</div>
                     <div style={{fontSize:11,fontWeight:700,color:RARITY_COLORS[dropResult.item.rarity]}}>{dropResult.item.name}</div>
                     <RarityBadge rarity={dropResult.item.rarity}/>
                     <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Added to inventory!</div>
@@ -674,60 +670,55 @@ export default function TokenQuest() {
               </div>
             )}
 
-            {/* Attack / Next Boss buttons */}
+            {/* Buttons */}
             <div style={{display:"flex",gap:8}}>
               {!combatResult?(
-                <button className="btn attack-btn" onClick={attack}
-                  disabled={currentEnergy<1}
-                  style={{flex:1,background:currentEnergy>0?"linear-gradient(135deg,#ef4444,#b91c1c)":"#333",
-                    color:"#fff",padding:"14px",fontSize:16,letterSpacing:1}}>
-                  ⚔️ ATTACK{currentEnergy<1?" (No Energy)":""}
-                </button>
+                <button className="btn" onClick={attack} disabled={currentEnergy<1} style={{
+                  flex:1,
+                  background:currentEnergy>0?"linear-gradient(135deg,#ef4444,#b91c1c)":"#333",
+                  color:"#fff",padding:"14px",fontSize:16,letterSpacing:1,
+                }}>⚔️ ATTACK{currentEnergy<1?" (No Energy)":""}</button>
               ):(
-                <button className="btn" onClick={nextBoss}
-                  style={{flex:1,background:"linear-gradient(135deg,#22c55e,#16a34a)",
-                    color:"#fff",padding:"14px",fontSize:14}}>
-                  ➡️ Next Boss #{state.bossIndex}
-                </button>
+                <button className="btn" onClick={nextBoss} style={{
+                  flex:1,background:"linear-gradient(135deg,#22c55e,#16a34a)",
+                  color:"#fff",padding:"14px",fontSize:14,
+                }}>➡️ Next Boss #{state.bossIndex}</button>
               )}
             </div>
           </div>
         )}
 
-        {/* Watch Ad for Energy */}
+        {/* Watch Ad */}
         <div className="card" style={{marginBottom:10,background:"rgba(245,158,11,0.04)",border:"1px solid #f59e0b20"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <div style={{fontSize:11,color:"#f59e0b",fontWeight:700}}>📺 Watch Ad</div>
-              <div style={{fontSize:10,color:"#666"}}>+10 ⚡ energy reward</div>
+              <div style={{fontSize:10,color:"#666"}}>+1 ⚡ energy reward</div>
             </div>
             {watchingAd?(
               <div style={{textAlign:"center"}}>
-                <div style={{fontSize:12,color:"#f59e0b",fontWeight:700}}>{adTimer}s</div>
-                <div style={{fontSize:9,color:"#555"}}>watching...</div>
-                <div style={{background:"#1a1a2e",borderRadius:4,height:4,width:80,overflow:"hidden",marginTop:4}}>
+                <div style={{fontSize:14,color:"#f59e0b",fontWeight:700}}>{adTimer}s</div>
+                <div style={{background:"#1a1a2e",borderRadius:4,height:4,width:70,overflow:"hidden",marginTop:3}}>
                   <div style={{width:`${((30-adTimer)/30)*100}%`,background:"#f59e0b",height:"100%",borderRadius:4,transition:"width 1s"}}/>
                 </div>
               </div>
             ):(
-              <button className="btn" onClick={startWatchAd}
-                disabled={currentEnergy>=MAX_ENERGY}
-                style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",
-                  color:"#000",padding:"8px 16px",fontSize:12}}>
-                {currentEnergy>=MAX_ENERGY?"Energy Full":"Watch"}
-              </button>
+              <button className="btn" onClick={startWatchAd} disabled={currentEnergy>=MAX_ENERGY} style={{
+                background:"linear-gradient(135deg,#f59e0b,#d97706)",
+                color:"#000",padding:"8px 16px",fontSize:12,
+              }}>{currentEnergy>=MAX_ENERGY?"Full":"Watch"}</button>
             )}
           </div>
         </div>
 
-        {/* Banner Ad placeholder */}
+        {/* Banner Ad */}
         <div style={{marginBottom:10,padding:"8px 12px",background:"rgba(255,255,255,0.02)",
           border:"1px dashed #333",borderRadius:8,textAlign:"center"}}>
           <div style={{fontSize:9,color:"#333"}}>Advertisement</div>
-          <div style={{fontSize:10,color:"#444",marginTop:2}}>[ Banner Ad — AdSense pending approval ]</div>
+          <div style={{fontSize:10,color:"#444",marginTop:2}}>[ Banner Ad ]</div>
         </div>
 
-        {/* Inventory */}
+        {/* Inventory toggle */}
         <button className="btn" onClick={()=>setShowInventory(!showInventory)} style={{
           width:"100%",background:"rgba(168,85,247,0.08)",color:"#c084fc",
           border:"1px solid #a855f725",padding:"8px",fontSize:11,marginBottom:8,
@@ -736,7 +727,7 @@ export default function TokenQuest() {
         {showInventory&&(
           <div className="card" style={{marginBottom:10,animation:"slideIn 0.3s ease"}}>
             {!(state.inventory||[]).length
-              ? <div style={{textAlign:"center",color:"#444",fontSize:12}}>No items yet. Defeat bosses!</div>
+              ? <div style={{textAlign:"center",color:"#444",fontSize:12}}>No items yet!</div>
               : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
                   {(state.inventory||[]).slice().reverse().slice(0,12).map((item,i)=>(
                     <div key={i} onClick={()=>setEquipFrom(item)} style={{
@@ -755,8 +746,8 @@ export default function TokenQuest() {
 
         {/* Equip Modal */}
         {equipFrom&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",
-            alignItems:"center",justifyContent:"center",zIndex:100}}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",
+            display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
             <div className="card" style={{maxWidth:280,width:"90%",textAlign:"center",
               border:`2px solid ${RARITY_COLORS[equipFrom.rarity]}`,
               boxShadow:`0 0 30px ${RARITY_COLORS[equipFrom.rarity]}40`}}>
@@ -769,14 +760,11 @@ export default function TokenQuest() {
               </div>
               <div style={{display:"flex",gap:8,marginTop:12}}>
                 <button className="btn" onClick={()=>equipItem(equipFrom)} style={{
-                  flex:1,background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",padding:"10px",fontSize:12}}>
-                  ✅ Equip
-                </button>
+                  flex:1,background:"linear-gradient(135deg,#22c55e,#16a34a)",
+                  color:"#fff",padding:"10px",fontSize:12}}>✅ Equip</button>
                 <button className="btn" onClick={()=>setEquipFrom(null)} style={{
                   flex:1,background:"rgba(255,255,255,0.06)",color:"#aaa",
-                  border:"1px solid #333",padding:"10px",fontSize:12}}>
-                  ✕ Cancel
-                </button>
+                  border:"1px solid #333",padding:"10px",fontSize:12}}>✕ Cancel</button>
               </div>
             </div>
           </div>
@@ -811,7 +799,7 @@ export default function TokenQuest() {
             <button className="btn" onClick={loadLeaderboard} style={{width:"100%",
               background:"rgba(245,158,11,0.1)",color:"#fde68a",
               border:"1px solid #f59e0b30",padding:"8px",fontSize:12,marginBottom:10}}>
-              {loadingLB?"⏳ Loading...":"🔄 Refresh"}
+              {loadingLB?"⏳ Loading...":"🔄 Refresh Leaderboard"}
             </button>
             {leaderboard.length===0&&!loadingLB&&(
               <div style={{textAlign:"center",color:"#444",fontSize:12,padding:20}}>No players yet. Be the first!</div>
@@ -958,13 +946,25 @@ export default function TokenQuest() {
           <div style={{color:avatar.color,fontSize:11,marginBottom:4}}>{avatar.name}</div>
           <div style={{color:"#a78bfa",fontSize:11,fontStyle:"italic",marginBottom:12}}>{title}</div>
           <div style={{display:"flex",justifyContent:"center",gap:14,marginBottom:12}}>
-            <div><div style={{fontSize:20,fontWeight:700,color:"#fde68a"}}>Lv {level}</div><div style={{fontSize:8,color:"#aaa"}}>Level</div></div>
-            <div><div style={{fontSize:20,fontWeight:700,color:"#34d399"}}>🪙{state.tokens}</div><div style={{fontSize:8,color:"#aaa"}}>Tokens</div></div>
-            <div><div style={{fontSize:20,fontWeight:700,color:"#ef4444"}}>💀#{state.bossIndex}</div><div style={{fontSize:8,color:"#aaa"}}>Current Boss</div></div>
-            <div><div style={{fontSize:20,fontWeight:700,color:"#fbbf24"}}>🔥{state.streak}</div><div style={{fontSize:8,color:"#aaa"}}>Streak</div></div>
+            <div>
+              <div style={{fontSize:20,fontWeight:700,color:"#fde68a"}}>Lv {level}</div>
+              <div style={{fontSize:8,color:"#aaa"}}>Level</div>
+            </div>
+            <div>
+              <div style={{fontSize:20,fontWeight:700,color:"#34d399"}}>🪙{state.tokens}</div>
+              <div style={{fontSize:8,color:"#aaa"}}>Tokens</div>
+            </div>
+            <div>
+              <div style={{fontSize:20,fontWeight:700,color:"#ef4444"}}>💀#{state.bossIndex}</div>
+              <div style={{fontSize:8,color:"#aaa"}}>Current Boss</div>
+            </div>
+            <div>
+              <div style={{fontSize:20,fontWeight:700,color:"#fbbf24"}}>🔥{state.streak}</div>
+              <div style={{fontSize:8,color:"#aaa"}}>Streak</div>
+            </div>
           </div>
-          <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>
-            ⚔️ Attack: {totalDamage} | 🎯 Crit: {critChance}% | ⚡ Energy: {currentEnergy}/{MAX_ENERGY}
+          <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>
+            ⚔️ DMG: {totalDamage} | 🎯 Crit: {critChance}% | ⚡ {currentEnergy}/{MAX_ENERGY}
           </div>
           <StatBar label="XP" value={xi.progress} max={xi.total} color="#f59e0b"/>
         </div>
@@ -976,19 +976,23 @@ export default function TokenQuest() {
             {GEAR_SLOTS.map(slot=>(
               <GearSlot key={slot} slot={slot} item={state.gear?.[slot]}
                 onEquip={()=>{
-                  const items = (state.inventory||[]).filter(i=>i.slot===slot);
-                  if (items.length===0) return;
-                  const best = items.sort((a,b)=>RARITY_ORDER.indexOf(b.rarity)-RARITY_ORDER.indexOf(a.rarity))[0];
+                  const items=(state.inventory||[]).filter(i=>i&&i.slot===slot);
+                  if (!items.length) return;
+                  const best=items.sort((a,b)=>RARITY_ORDER.indexOf(b.rarity)-RARITY_ORDER.indexOf(a.rarity))[0];
                   equipItem(best);
                 }}/>
             ))}
           </div>
-          <div style={{fontSize:9,color:"#555",marginTop:6,textAlign:"center"}}>Tap a slot to auto-equip best item</div>
+          <div style={{fontSize:9,color:"#555",marginTop:6,textAlign:"center"}}>
+            Tap a slot to auto-equip best item
+          </div>
         </div>
 
         {/* Inventory */}
         <div className="card" style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🎒 Inventory ({(state.inventory||[]).length} items)</div>
+          <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>
+            🎒 Inventory ({(state.inventory||[]).length} items)
+          </div>
           {!(state.inventory||[]).length
             ? <div style={{color:"#444",fontSize:12,textAlign:"center"}}>No items yet. Defeat bosses!</div>
             : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
@@ -1006,10 +1010,17 @@ export default function TokenQuest() {
               </div>}
         </div>
 
+        {/* Energy timer in profile */}
+        <div className="card" style={{marginBottom:10}}>
+          <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={Math.max(0,fullMs)}/>
+        </div>
+
         <div style={{textAlign:"center",marginBottom:8}}>
           <button className="btn" onClick={()=>{
             if(confirm("Reset everything? You will lose all progress!")) {
-              setState(initialState); saveLocal(initialState); setScreen("register");
+              setState(initialState);
+              saveLocal(initialState);
+              setScreen("register");
             }
           }} style={{background:"transparent",color:"#333",fontSize:10,border:"1px solid #222",padding:"3px 10px"}}>
             reset account
@@ -1019,10 +1030,9 @@ export default function TokenQuest() {
       <BottomNav/>
     </div>
   );
-
   // ── VIEW EXTERNAL PROFILE ─────────────────────────────────────────────────
   if (screen==="viewProfile"&&viewProfile) {
-    const vAvatar = AVATARS.find(a=>a.id===viewProfile.avatar)||AVATARS[0];
+    const vAvatar=AVATARS.find(a=>a.id===viewProfile.avatar)||AVATARS[0];
     return (
       <div style={wrap}>
         <style>{css}</style>
@@ -1039,14 +1049,26 @@ export default function TokenQuest() {
             <div style={{color:vAvatar.color,fontSize:10,marginBottom:4}}>{vAvatar.name}</div>
             <div style={{color:"#a78bfa",fontSize:11,fontStyle:"italic",marginBottom:10}}>{viewProfile.title}</div>
             <div style={{display:"flex",justifyContent:"center",gap:14,marginBottom:8}}>
-              <div><div style={{fontSize:18,fontWeight:700,color:"#fde68a"}}>Lv {viewProfile.level}</div><div style={{fontSize:8,color:"#aaa"}}>Level</div></div>
-              <div><div style={{fontSize:18,fontWeight:700,color:"#34d399"}}>🪙{viewProfile.tokens}</div><div style={{fontSize:8,color:"#aaa"}}>Tokens</div></div>
-              <div><div style={{fontSize:18,fontWeight:700,color:"#ef4444"}}>💀#{viewProfile.bossIndex}</div><div style={{fontSize:8,color:"#aaa"}}>Boss</div></div>
-              <div><div style={{fontSize:18,fontWeight:700,color:"#fbbf24"}}>🔥{viewProfile.streak||0}</div><div style={{fontSize:8,color:"#aaa"}}>Streak</div></div>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#fde68a"}}>Lv {viewProfile.level}</div>
+                <div style={{fontSize:8,color:"#aaa"}}>Level</div>
+              </div>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#34d399"}}>🪙{viewProfile.tokens}</div>
+                <div style={{fontSize:8,color:"#aaa"}}>Tokens</div>
+              </div>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#ef4444"}}>💀#{viewProfile.bossIndex}</div>
+                <div style={{fontSize:8,color:"#aaa"}}>Boss</div>
+              </div>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#fbbf24"}}>🔥{viewProfile.streak||0}</div>
+                <div style={{fontSize:8,color:"#aaa"}}>Streak</div>
+              </div>
             </div>
           </div>
 
-          {/* Gear preview */}
+          {/* Their Gear */}
           {viewProfile.gear&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🛡️ Their Gear</div>
@@ -1058,15 +1080,17 @@ export default function TokenQuest() {
             </div>
           )}
 
-          {/* Latest items */}
+          {/* Their latest items */}
           {viewProfile.inventory?.length>0&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🎒 Latest items</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
                 {viewProfile.inventory.slice(-6).reverse().map((item,i)=>(
-                  <div key={i} style={{background:`${RARITY_COLORS[item.rarity]}12`,
+                  <div key={i} style={{
+                    background:`${RARITY_COLORS[item.rarity]}12`,
                     border:`1px solid ${RARITY_COLORS[item.rarity]}40`,
-                    borderRadius:8,padding:8,textAlign:"center"}}>
+                    borderRadius:8,padding:8,textAlign:"center",
+                  }}>
                     <div style={{fontSize:18}}>{item.emoji}</div>
                     <div style={{fontSize:9,fontWeight:700,color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
                   </div>
@@ -1075,7 +1099,7 @@ export default function TokenQuest() {
             </div>
           )}
 
-          {/* Gift */}
+          {/* Gift button */}
           {(state.friends||[]).includes(viewProfile.username)&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#c084fc",marginBottom:6}}>
@@ -1085,11 +1109,13 @@ export default function TokenQuest() {
               <button className="btn" onClick={()=>doSendGift(viewProfile.username)}
                 disabled={giftSending||state.tokens<100} style={{
                 width:"100%",background:"linear-gradient(135deg,#7c3aed,#4c1d95)",
-                color:"#fff",padding:"10px",fontSize:13,opacity:state.tokens<100?0.5:1}}>
+                color:"#fff",padding:"10px",fontSize:13,
+                opacity:state.tokens<100?0.5:1}}>
                 {giftSending?"⏳ Sending...":"🎁 Send random item"}
               </button>
             </div>
           )}
+
         </div>
         <BottomNav/>
       </div>
