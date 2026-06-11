@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>About Token Quest — RPG Game</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: linear-gradient(135deg, #0a0a1a 0%, #0d0d2b 50%, #0a0a1a 100%);
+      color: #e8e0d0;
+      font-family: Georgia, serif;
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+    .container { max-width: 640px; margin: 0 auto; }
+    h1 { color: #fde68a; font-size: 28px; text-shadow: 0 0 20px #f59e0b80; margin-bottom: 6px; }
+    h2 { color: #f59e0b; font-size: 18px; margin: 28px 0 10px; }
+    p  { color: #aaa; line-height: 1.8; font-size: 14px; margin-bottom: 12px; }
+    .badge { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; margin:2px; }
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .nav {
+      display: flex; gap: 12px; margin-bottom: 28px;
+      padding-bottom: 16px; border-bottom: 1px solid #222;
+      align-items: center;
+    }
+    .nav a { color: #f59e0b; font-size: 13px; text-decoration: none; }
+    .nav a:hover { color: #fde68a; }
+    .hero { text-align:center; margin-bottom:32px; }
+    .hero .emoji { font-size: 56px; margin-bottom: 8px; }
+    .subtitle { color: #a78bfa; font-size: 13px; font-style: italic; margin-bottom: 20px; }
+    ul { color: #aaa; line-height: 2; font-size: 14px; padding-left: 20px; margin-bottom: 12px; }
+    .rarity-common    { background:#aaa20;    border:1px solid #aaa;    color:#aaa; }
+    .rarity-uncommon  { background:#4CAF5020; border:1px solid #4CAF50; color:#4CAF50; }
+    .rarity-rare      { background:#2196F320; border:1px solid #2196F3; color:#2196F3; }
+    .rarity-epic      { background:#9C27B020; border:1px solid #9C27B0; color:#9C27B0; }
+    .rarity-legendary { background:#FF980020; border:1px solid #FF9800; color:#FF9800; }
+    .cta {
+      display: block; width: 100%; padding: 14px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #000; font-size: 16px; font-weight: 700;
+      border: none; border-radius: 10px; cursor: pointer;
+      text-align: center; text-decoration: none;
+      font-family: Georgia, serif; margin-top: 8px;
+    }
+    .cta:hover { filter: brightness(1.1); }
+    footer { text-align:center; color:#333; font-size:11px; margin-top:40px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <nav class="nav">
+    <a href="/">⚔️ Play Token Quest</a>
+    <span style="color:#333">|</span>
+    <a href="/about.html">About</a>
+  </nav>
+
+  <div class="hero">
+    <div class="emoji">⚔️</div>
+    <h1>Token Quest</h1>
+    <p class="subtitle">The RPG where watching makes you stronger</p>
+  </div>
+
+  <div class="card">
+    <h2>What is Token Quest?</h2>
+    <p>Token Quest is a free-to-play browser RPG game where players build a hero, collect gear, and battle an endless chain of bosses — all from their phone or desktop. No downloads, no installs. Just open the link and start fighting.</p>
+    <p>The game combines classic RPG progression mechanics — leveling up, loot drops, gear slots, critical hits — with a unique energy system that rewards consistent daily play. The longer you play, the stronger your hero becomes.</p>
+  </div>
+
+  <div class="card">
+    <h2>⚡ How the Energy System Works</h2>
+    <p>Every player starts with a pool of 60 energy points. Each attack against a boss costs 1 energy. Energy regenerates automatically at a rate of 1 point every 10 minutes, keeping players coming back throughout the day.</p>
+    <p>Players can also earn bonus energy by watching short video ads — a rewarded ad system that gives +10 energy instantly, letting dedicated players push through tougher bosses faster.</p>
+  </div>
+
+  <div class="card">
+    <h2>⚔️ Combat and Boss System</h2>
+    <p>Token Quest features a progressive boss system with 100+ unique bosses. Boss #1 has 1 HP, Boss #2 has 2 HP, and so on — meaning each new boss requires more attacks and better gear to defeat efficiently. Players must balance their energy usage carefully against boss difficulty.</p>
+    <p>Each attack deals damage based on the hero's base strength plus any equipped weapon. A well-geared hero with a Legendary sword can deal 5 damage per hit — and with a critical strike, a devastating 10.</p>
+  </div>
+
+  <div class="card">
+    <h2>🎒 Loot, Gear and Rarity System</h2>
+    <p>Defeating bosses triggers a drop roll. 90% of the time, players earn bonus energy attacks. 10% of the time, a piece of gear drops — one of six equipment slots:</p>
+    <ul>
+      <li>⚔️ Sword — increases attack damage</li>
+      <li>⛑️ Helmet — head protection</li>
+      <li>🧥 Chest — body armor</li>
+      <li>👟 Boots — foot gear</li>
+      <li>🩲 Leggings — leg protection</li>
+      <li>🥊 Gloves — hand equipment</li>
+    </ul>
+    <p>Every item has one of five rarity tiers, with higher rarities unlocking as players level up:</p>
+    <p>
+      <span class="badge rarity-common">Common</span>
+      <span class="badge rarity-uncommon">Uncommon</span>
+      <span class="badge rarity-rare">Rare</span>
+      <span class="badge rarity-epic">Epic</span>
+      <span class="badge rarity-legendary">Legendary</span>
+    </p>
+    <p>Legendary items grant a 5% critical hit chance in addition to maximum damage bonuses, making them highly sought after. The rarity of drops scales with player level — early players find mostly Common gear, while high-level veterans can discover Legendary items.</p>
+  </div>
+
+  <div class="card">
+    <h2>🏆 Multiplayer and Social Features</h2>
+    <p>Token Quest includes a global leaderboard where players compete for the highest level and furthest boss progress. Players can add friends by username, view their profiles, inspect their equipped gear, and send gift items spending 100 tokens.</p>
+    <p>The inbox system delivers gifts in real time — players can claim received items and instantly equip them for a power boost. Social interaction is designed around friendly competition and generosity rather than direct conflict.</p>
+  </div>
+
+  <div class="card">
+    <h2>🎭 Hero Classes</h2>
+    <p>At registration, players choose one of five hero classes — each with a unique visual identity:</p>
+    <ul>
+      <li>⚔️ Warrior — the frontline fighter</li>
+      <li>🧙 Mage — master of arcane power</li>
+      <li>🏹 Ranger — swift and precise</li>
+      <li>🛡️ Paladin — holy defender</li>
+      <li>🗡️ Rogue — shadow striker</li>
+    </ul>
+    <p>Class selection is cosmetic for now, with stat differentiation planned for future updates alongside expanded skill trees and class-specific gear sets.</p>
+  </div>
+
+  <div class="card">
+    <h2>🚀 What's Coming Next</h2>
+    <p>Token Quest is actively developed and updated regularly. Upcoming features include expanded boss varieties with unique mechanics, class-specific stat bonuses, a crafting system for combining gear, seasonal events with exclusive Legendary drops, and guild/clan systems for group play.</p>
+    <p>The game is entirely free to play with no pay-to-win mechanics. All gear is earned through gameplay. Revenue is generated through non-intrusive display advertising and optional rewarded video ads that players choose to watch in exchange for in-game energy.</p>
+  </div>
+
+  <a href="/" class="cta">⚔️ Play Token Quest for Free</a>
+
+  <footer>
+    <p>Token Quest — A free browser RPG. No download required.</p>
+    <p style="margin-top:6px">© 2026 Token Quest. All rights reserved.</p>
+  </footer>
+
+</div>
+</body>
+</html>
