@@ -2,6 +2,40 @@ import React, { useState, useEffect, useRef } from "react";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
+const VERSION = "0.02";
+const PATCH_NOTES = [
+  {
+    version: "0.02",
+    date: "2026-06-11",
+    changes: [
+      "🔧 FIX: Boss HP no longer resets on page refresh",
+      "☁️ Account data now saved to cloud (no more local cheating)",
+      "📢 Banner ads moved above navigation bar",
+      "📋 Patch Notes tab added",
+      "⚡ Watch Ad now gives +1 energy (was +10)",
+      "🎁 Item drop rate increased to 20% (was 10%)",
+      "💀 Energy drops from bosses reduced by 25%",
+      "🪙 Tokens earned per boss kill: 1",
+    ]
+  },
+  {
+    version: "0.01",
+    date: "2026-06-01",
+    changes: [
+      "⚔️ Initial release of Token Quest",
+      "🎭 5 hero classes: Warrior, Mage, Ranger, Paladin, Rogue",
+      "💀 Progressive boss system (Boss #1 = 1HP, Boss #2 = 2HP...)",
+      "🎒 6 gear slots: Sword, Helmet, Chest, Boots, Leggings, Gloves",
+      "✨ 5 rarity tiers: Common, Uncommon, Rare, Epic, Legendary",
+      "🏆 Global leaderboard",
+      "👥 Friends system",
+      "🎁 Gift system (100 tokens = send item)",
+      "⚡ Energy system (60 max, +1 per 10 min)",
+      "📺 Watch Ad for bonus energy",
+    ]
+  },
+];
+
 const AVATARS = [
   { id:"warrior", emoji:"⚔️", name:"Warrior", color:"#ef4444" },
   { id:"mage",    emoji:"🧙", name:"Mage",    color:"#3b82f6" },
@@ -16,22 +50,17 @@ const GEAR_SLOTS    = ["Sword","Helmet","Chest","Boots","Leggings","Gloves"];
 const GEAR_EMOJI    = { Sword:"⚔️", Helmet:"⛑️", Chest:"🧥", Boots:"👟", Leggings:"🩲", Gloves:"🥊" };
 const GEAR_DAMAGE   = { Common:1, Uncommon:2, Rare:3, Epic:4, Legendary:5 };
 const GEAR_CRIT     = { Common:0, Uncommon:0, Rare:0, Epic:0, Legendary:5 };
-
 const MAX_ENERGY    = 60;
-const ENERGY_REGEN  = 10 * 60 * 1000; // 10 min in ms
+const ENERGY_REGEN  = 10 * 60 * 1000;
 
-// Drop rates: 20% item, 80% energy (energy amounts reduced 25%)
 function getBossDrops(playerLevel) {
   const r = Math.random() * 100;
-  if (r < 20) {
-    return { type:"item", rarity:getItemRarity(playerLevel) };
-  }
-  // 80% energy, reduced amounts
+  if (r < 20) return { type:"item", rarity:getItemRarity(playerLevel) };
   const a = Math.random() * 100;
-  if (a < 5)  return { type:"attacks", amount:15 }; // was 20
-  if (a < 20) return { type:"attacks", amount:11 }; // was 15
-  if (a < 40) return { type:"attacks", amount:7  }; // was 10
-  return       { type:"attacks", amount:4  };        // was 6
+  if (a < 5)  return { type:"attacks", amount:15 };
+  if (a < 20) return { type:"attacks", amount:11 };
+  if (a < 40) return { type:"attacks", amount:7 };
+  return       { type:"attacks", amount:4 };
 }
 
 function getItemRarity(playerLevel) {
@@ -66,7 +95,6 @@ function xpInfo(xp) {
   const l=getLevel(xp), n=Math.pow(l,1/0.6)*100, p=Math.pow(l-1,1/0.6)*100;
   return { progress:Math.floor(xp-p), total:Math.floor(n-p) };
 }
-
 const TITLES = [
   { threshold:0,     title:"Novice Watcher" },
   { threshold:500,   title:"Screen Guardian" },
@@ -77,79 +105,78 @@ const TITLES = [
 ];
 function getTitle(xp) { let t=TITLES[0]; for(const x of TITLES) if(xp>=x.threshold) t=x; return t.title; }
 
-function calcEnergy(state) {
-  const now     = Date.now();
-  const elapsed = now - (state.lastEnergyTime||now);
+function calcEnergy(energy, lastEnergyTime) {
+  const elapsed = Date.now() - (lastEnergyTime||Date.now());
   const regen   = Math.floor(elapsed/ENERGY_REGEN);
-  return Math.min(MAX_ENERGY, (state.energy||0)+regen);
+  return Math.min(MAX_ENERGY, (energy||0)+regen);
 }
-
-function getNextEnergyMs(state) {
-  const elapsed  = Date.now() - (state.lastEnergyTime||Date.now());
-  const nextRegen = ENERGY_REGEN - (elapsed % ENERGY_REGEN);
-  return nextRegen;
+function getNextEnergyMs(lastEnergyTime) {
+  const elapsed = Date.now() - (lastEnergyTime||Date.now());
+  return ENERGY_REGEN - (elapsed % ENERGY_REGEN);
 }
-
 function formatTime(ms) {
-  const totalSec = Math.ceil(ms/1000);
-  const m = Math.floor(totalSec/60);
-  const s = totalSec%60;
-  return `${m}:${s.toString().padStart(2,"0")}`;
+  const s=Math.ceil(ms/1000), m=Math.floor(s/60);
+  return `${m}:${(s%60).toString().padStart(2,"0")}`;
 }
-
 function formatFullTime(ms) {
-  const totalSec = Math.ceil(ms/1000);
-  const h = Math.floor(totalSec/3600);
-  const m = Math.floor((totalSec%3600)/60);
-  const s = totalSec%60;
-  if (h>0) return `${h}h ${m}m`;
-  if (m>0) return `${m}m ${s}s`;
-  return `${s}s`;
+  const s=Math.ceil(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+  if(h>0) return `${h}h ${m}m`;
+  if(m>0) return `${m}m ${s%60}s`;
+  return `${s%60}s`;
 }
 
 const initialState = {
   username:"", avatar:null,
   totalXp:0, tokens:0,
   streak:0, lastDay:null,
-  bossIndex:1,
+  bossIndex:1, currentBossHp:1,
   gear:{ Sword:null, Helmet:null, Chest:null, Boots:null, Leggings:null, Gloves:null },
   inventory:[],
-  energy:MAX_ENERGY,
-  lastEnergyTime:Date.now(),
-  log:[],
-  friends:[], inbox:[],
+  energy:MAX_ENERGY, lastEnergyTime:Date.now(),
+  log:[], friends:[], inbox:[],
 };
 
-function loadLocal() {
-  try { const s=localStorage.getItem("tq_v2"); return s?{...initialState,...JSON.parse(s)}:initialState; }
-  catch { return initialState; }
+// Cache locale solo per velocità
+function loadCache() {
+  try { const s=localStorage.getItem("tq_cache"); return s?JSON.parse(s):null; } catch{ return null; }
 }
-function saveLocal(s) { try { localStorage.setItem("tq_v2",JSON.stringify(s)); } catch{} }
+function saveCache(s) { try { localStorage.setItem("tq_cache",JSON.stringify(s)); } catch{} }
+// ─── CLOUD STORAGE ───────────────────────────────────────────────────────────
 
-function getEquippedDamage(gear) {
-  const sword=gear?.Sword;
-  return sword ? (GEAR_DAMAGE[sword.rarity]||0) : 0;
-}
-
-function getEquippedCrit(gear) {
-  if (!gear) return 0;
-  return Object.values(gear).reduce((acc,item)=>acc+(item?GEAR_CRIT[item.rarity]||0:0),0);
-}
-// ─── STORAGE ─────────────────────────────────────────────────────────────────
-
-async function pushProfile(state) {
+async function cloudSave(state) {
   if (!state.username) return;
-  const profile = {
-    username:state.username, avatar:state.avatar,
-    level:getLevel(state.totalXp), totalXp:state.totalXp,
-    tokens:state.tokens, streak:state.streak,
-    title:getTitle(state.totalXp),
-    bossIndex:state.bossIndex,
-    gear:state.gear,
-    inventory:state.inventory.slice(-6),
-    updatedAt:Date.now(),
-  };
-  try { await window.storage.set(`tq:${state.username}`,JSON.stringify(profile),true); } catch{}
+  try {
+    await window.storage.set(`tq_player:${state.username}`, JSON.stringify({
+      ...state,
+      updatedAt: Date.now(),
+    }), true);
+  } catch{}
+}
+
+async function cloudLoad(username) {
+  try {
+    const r = await window.storage.get(`tq_player:${username}`, true);
+    return r ? JSON.parse(r.value) : null;
+  } catch { return null; }
+}
+
+async function pushPublicProfile(state) {
+  if (!state.username) return;
+  try {
+    await window.storage.set(`tq:${state.username}`, JSON.stringify({
+      username:   state.username,
+      avatar:     state.avatar,
+      level:      getLevel(state.totalXp),
+      totalXp:    state.totalXp,
+      tokens:     state.tokens,
+      streak:     state.streak,
+      title:      getTitle(state.totalXp),
+      bossIndex:  state.bossIndex,
+      gear:       state.gear,
+      inventory:  (state.inventory||[]).slice(-6),
+      updatedAt:  Date.now(),
+    }), true);
+  } catch{}
 }
 
 async function fetchProfile(username) {
@@ -238,13 +265,13 @@ function EnergyBar({current,max,nextMs,fullMs}) {
 }
 
 function BossHPBar({current,max,name,emoji}) {
-  const pct   = (current/max)*100;
+  const pct   = Math.max(0,(current/max)*100);
   const color = pct>50?"#ef4444":pct>25?"#f59e0b":"#22c55e";
   return (
     <div style={{marginBottom:8}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <span style={{fontSize:14,fontWeight:700,color:"#fca5a5"}}>{emoji} {name}</span>
-        <span style={{fontSize:12,color:"#ef4444",fontWeight:700}}>{current}/{max} HP</span>
+        <span style={{fontSize:12,color:"#ef4444",fontWeight:700}}>{Math.max(0,current)}/{max} HP</span>
       </div>
       <div style={{background:"#1a1a2e",borderRadius:6,height:12,overflow:"hidden",border:"1px solid #ef444430"}}>
         <div style={{width:`${pct}%`,background:`linear-gradient(90deg,${color},#ef4444)`,
@@ -273,159 +300,189 @@ function GearSlot({slot,item,onEquip}) {
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function TokenQuest() {
-  const [state, setState]   = useState(loadLocal);
-  const [screen, setScreen] = useState(state.username?"main":"register");
+  const [state, setState]     = useState(()=>loadCache()||initialState);
+  const [screen, setScreen]   = useState("loading");
   const [regName, setRegName]     = useState("");
   const [regAvatar, setRegAvatar] = useState(null);
   const [regError, setRegError]   = useState("");
+  const [loginName, setLoginName] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [authMode, setAuthMode]   = useState("register"); // register|login
 
   // Combat
-  const [bossHp, setBossHp]               = useState(null);
-  const [combatLog, setCombatLog]         = useState([]);
-  const [combatResult, setCombatResult]   = useState(null);
-  const [dropResult, setDropResult]       = useState(null);
-  const [showDrop, setShowDrop]           = useState(false);
+  const [combatLog, setCombatLog]       = useState([]);
+  const [combatResult, setCombatResult] = useState(null);
+  const [dropResult, setDropResult]     = useState(null);
+  const [showDrop, setShowDrop]         = useState(false);
 
   // Social
-  const [socialTab, setSocialTab]         = useState("leaderboard");
-  const [leaderboard, setLeaderboard]     = useState([]);
-  const [loadingLB, setLoadingLB]         = useState(false);
-  const [friendInput, setFriendInput]     = useState("");
+  const [socialTab, setSocialTab]           = useState("leaderboard");
+  const [leaderboard, setLeaderboard]       = useState([]);
+  const [loadingLB, setLoadingLB]           = useState(false);
+  const [friendInput, setFriendInput]       = useState("");
   const [friendProfiles, setFriendProfiles] = useState({});
-  const [inbox, setInbox]                 = useState([]);
-  const [loadingInbox, setLoadingInbox]   = useState(false);
-  const [giftTarget, setGiftTarget]       = useState(null);
-  const [giftSending, setGiftSending]     = useState(false);
-  const [giftMsg, setGiftMsg]             = useState("");
-  const [viewProfile, setViewProfile]     = useState(null);
+  const [inbox, setInbox]                   = useState([]);
+  const [loadingInbox, setLoadingInbox]     = useState(false);
+  const [giftTarget, setGiftTarget]         = useState(null);
+  const [giftSending, setGiftSending]       = useState(false);
+  const [giftMsg, setGiftMsg]               = useState("");
+  const [viewProfile, setViewProfile]       = useState(null);
 
-  // Inventory
+  // UI
   const [showInventory, setShowInventory] = useState(false);
   const [equipFrom, setEquipFrom]         = useState(null);
-
-  // Ad simulation
-  const [watchingAd, setWatchingAd] = useState(false);
-  const [adTimer, setAdTimer]       = useState(0);
+  const [watchingAd, setWatchingAd]       = useState(false);
+  const [adTimer, setAdTimer]             = useState(0);
   const adRef = useRef(null);
-
-  // Energy timer tick
   const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(()=>setTick(p=>p+1), 1000);
-    return ()=>clearInterval(t);
-  }, []);
 
-  // Energy regen
-  useEffect(() => {
-    const current = calcEnergy(state);
-    if (current !== state.energy) {
-      setState(prev=>({...prev, energy:current, lastEnergyTime:Date.now()}));
+  // ── Boot: load from cloud ────────────────────────────────────────────────
+  useEffect(()=>{
+    async function boot() {
+      const cache = loadCache();
+      if (cache?.username) {
+        const cloud = await cloudLoad(cache.username);
+        if (cloud) {
+          setState({...initialState,...cloud});
+          saveCache({...initialState,...cloud});
+          setScreen("main");
+        } else {
+          setState({...initialState,...cache});
+          setScreen("main");
+        }
+      } else {
+        setScreen("auth");
+      }
     }
-  }, [tick]);
+    boot();
+  },[]);
 
-  useEffect(() => {
-    saveLocal(state);
-    if (state.username) pushProfile(state).catch(()=>{});
-  }, [state]);
+  // ── Energy tick ──────────────────────────────────────────────────────────
+  useEffect(()=>{
+    const t=setInterval(()=>setTick(p=>p+1),1000);
+    return ()=>clearInterval(t);
+  },[]);
 
-  useEffect(() => {
+  // ── Auto-save to cloud every 10 seconds ──────────────────────────────────
+  useEffect(()=>{
+    if (!state.username) return;
+    saveCache(state);
+    if (tick%10===0) {
+      cloudSave(state).catch(()=>{});
+      pushPublicProfile(state).catch(()=>{});
+    }
+  },[tick, state]);
+
+  useEffect(()=>{
     if (screen==="social") { loadLeaderboard(); loadInbox(); }
-  }, [screen]);
+  },[screen]);
 
-  useEffect(() => {
-    if (screen==="main" && bossHp===null) setBossHp(state.bossIndex);
-  }, [screen]);
+  const currentEnergy = calcEnergy(state.energy, state.lastEnergyTime);
+  const nextMs   = getNextEnergyMs(state.lastEnergyTime);
+  const fullMs   = Math.max(0,(MAX_ENERGY-currentEnergy)*ENERGY_REGEN - (Date.now()-(state.lastEnergyTime||Date.now()))%ENERGY_REGEN);
+  const level    = getLevel(state.totalXp);
+  const xi       = xpInfo(state.totalXp);
+  const title    = getTitle(state.totalXp);
+  const avatar   = AVATARS.find(a=>a.id===state.avatar)||AVATARS[0];
+  const swordDmg = GEAR_DAMAGE[state.gear?.Sword?.rarity]||0;
+  const critChance = Object.values(state.gear||{}).reduce((a,i)=>a+(i?GEAR_CRIT[i.rarity]||0:0),0);
+  const totalDmg = 1+swordDmg;
 
-  const level       = getLevel(state.totalXp);
-  const xi          = xpInfo(state.totalXp);
-  const title       = getTitle(state.totalXp);
-  const avatar      = AVATARS.find(a=>a.id===state.avatar)||AVATARS[0];
-  const currentEnergy = calcEnergy(state);
-  const nextMs      = getNextEnergyMs(state);
-  const fullMs      = (MAX_ENERGY - currentEnergy) * ENERGY_REGEN - (Date.now() - (state.lastEnergyTime||Date.now())) % ENERGY_REGEN;
-  const swordDamage = getEquippedDamage(state.gear);
-  const critChance  = getEquippedCrit(state.gear);
-  const totalDamage = 1 + swordDamage;
-
-  // ── Registration ──────────────────────────────────────────────────────────
+  // ── Register ──────────────────────────────────────────────────────────────
   async function handleRegister() {
-    const name = regName.trim();
+    const name=regName.trim();
     if (!name||name.length<2)          { setRegError("At least 2 characters!"); return; }
     if (name.length>20)                 { setRegError("Max 20 characters!"); return; }
     if (!/^[a-zA-Z0-9_]+$/.test(name)) { setRegError("Only letters, numbers and _"); return; }
-    if (!regAvatar)                     { setRegError("Choose your avatar!"); return; }
-    const existing = await fetchProfile(name);
-    if (existing) { setRegError("Username taken! Choose another."); return; }
-    const newState = {...initialState, username:name, avatar:regAvatar, energy:MAX_ENERGY, lastEnergyTime:Date.now()};
-    setState(newState); saveLocal(newState);
-    setScreen("main"); setBossHp(1);
+    if (!regAvatar)                     { setRegError("Choose your class!"); return; }
+    const existing=await fetchProfile(name);
+    if (existing) { setRegError("Username taken!"); return; }
+    const newState={...initialState,username:name,avatar:regAvatar,
+      energy:MAX_ENERGY,lastEnergyTime:Date.now(),currentBossHp:1};
+    setState(newState);
+    saveCache(newState);
+    await cloudSave(newState);
+    await pushPublicProfile(newState);
+    setScreen("main");
+  }
+
+  // ── Login (recover account) ───────────────────────────────────────────────
+  async function handleLogin() {
+    const name=loginName.trim();
+    if (!name) { setLoginError("Enter your username!"); return; }
+    const cloud=await cloudLoad(name);
+    if (!cloud) { setLoginError("Account not found!"); return; }
+    setState({...initialState,...cloud});
+    saveCache({...initialState,...cloud});
+    setScreen("main");
   }
 
   // ── Combat ────────────────────────────────────────────────────────────────
   function attack() {
     if (currentEnergy<1||combatResult) return;
-    const isCrit = Math.random()*100 < critChance;
-    const dmg    = isCrit ? totalDamage*2 : totalDamage;
-    const newHp  = Math.max(0, bossHp-dmg);
-    setCombatLog(prev=>[isCrit?`💥 CRITICAL! ${dmg} damage!`:`⚔️ ${dmg} damage dealt!`,...prev.slice(0,4)]);
-    setBossHp(newHp);
-    setState(prev=>({...prev, energy:Math.max(0,calcEnergy(prev)-1), lastEnergyTime:Date.now()}));
+    const isCrit = Math.random()*100<critChance;
+    const dmg    = isCrit?totalDmg*2:totalDmg;
+    const newHp  = Math.max(0,(state.currentBossHp||state.bossIndex)-dmg);
+    setCombatLog(prev=>[isCrit?`💥 CRITICAL! ${dmg} dmg!`:`⚔️ ${dmg} damage!`,...prev.slice(0,4)]);
 
     if (newHp<=0) {
-      const xpGain = state.bossIndex*10;
-      const drop   = getBossDrops(level);
-      let newInventory = [...(state.inventory||[])];
-      let extraEnergy  = 0;
-      let droppedItem  = null;
+      const xpGain=state.bossIndex*10;
+      const drop=getBossDrops(level);
+      let newInventory=[...(state.inventory||[])];
+      let extraEnergy=0;
 
       if (drop.type==="attacks") {
-        extraEnergy = drop.amount;
+        extraEnergy=drop.amount;
       } else {
-        const slot    = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
-        droppedItem   = {
-          id:Date.now(), slot, rarity:drop.rarity,
-          emoji:GEAR_EMOJI[slot],
-          name:`${drop.rarity} ${slot}`,
-          date:new Date().toLocaleDateString("en"),
-        };
-        newInventory = [...newInventory.slice(-29), droppedItem];
-        drop.item = droppedItem;
+        const slot=GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
+        drop.item={id:Date.now(),slot,rarity:drop.rarity,
+          emoji:GEAR_EMOJI[slot],name:`${drop.rarity} ${slot}`,
+          date:new Date().toLocaleDateString("en")};
+        newInventory=[...newInventory.slice(-29),drop.item];
       }
 
-      setDropResult(drop);
-      setShowDrop(true);
-      setCombatResult("victory");
+      setDropResult(drop); setShowDrop(true); setCombatResult("victory");
+
+      const newEnergy=Math.min(MAX_ENERGY,Math.max(0,currentEnergy-1)+extraEnergy);
+      const newBossIndex=state.bossIndex+1;
 
       setState(prev=>({
         ...prev,
-        totalXp:   prev.totalXp+xpGain,
-        tokens:    prev.tokens+1,
-        bossIndex: prev.bossIndex+1,
-        inventory: newInventory,
-        energy:    Math.min(MAX_ENERGY, Math.max(0,calcEnergy(prev)-1)+extraEnergy),
-        lastEnergyTime: Date.now(),
-        log:[...(prev.log||[]).slice(-20), `Boss #${state.bossIndex} defeated! +${xpGain} XP +1 token`],
+        totalXp:prev.totalXp+xpGain,
+        tokens:prev.tokens+1,
+        bossIndex:newBossIndex,
+        currentBossHp:newBossIndex,
+        inventory:newInventory,
+        energy:newEnergy,
+        lastEnergyTime:Date.now(),
+        log:[...(prev.log||[]).slice(-20),`Boss #${state.bossIndex} defeated! +${xpGain}XP`],
       }));
-      setBossHp(state.bossIndex+1);
+    } else {
+      // Save current boss HP to cloud
+      setState(prev=>({
+        ...prev,
+        currentBossHp:newHp,
+        energy:Math.max(0,currentEnergy-1),
+        lastEnergyTime:Date.now(),
+      }));
     }
   }
 
   function nextBoss() {
     setCombatResult(null); setCombatLog([]);
     setShowDrop(false);    setDropResult(null);
-    setBossHp(state.bossIndex);
   }
 
   // ── Watch Ad ──────────────────────────────────────────────────────────────
   function startWatchAd() {
     if (watchingAd||currentEnergy>=MAX_ENERGY) return;
     setWatchingAd(true); setAdTimer(30);
-    adRef.current = setInterval(()=>{
+    adRef.current=setInterval(()=>{
       setAdTimer(prev=>{
         if (prev<=1) {
           clearInterval(adRef.current);
           setWatchingAd(false);
-          setState(p=>({...p, energy:Math.min(MAX_ENERGY,calcEnergy(p)+1)}));
+          setState(p=>({...p,energy:Math.min(MAX_ENERGY,calcEnergy(p.energy,p.lastEnergyTime)+1)}));
           return 0;
         }
         return prev-1;
@@ -433,7 +490,7 @@ export default function TokenQuest() {
     },1000);
   }
 
-  // ── Leaderboard ───────────────────────────────────────────────────────────
+  // ── Social ────────────────────────────────────────────────────────────────
   async function loadLeaderboard() {
     setLoadingLB(true);
     setLeaderboard(await fetchLeaderboard());
@@ -482,8 +539,8 @@ export default function TokenQuest() {
     await deleteGift(gift.key);
     setInbox(prev=>prev.filter(g=>g.key!==gift.key));
     setState(prev=>({...prev,
-      inventory:[...(prev.inventory||[]).slice(-29),{...gift.item,date:new Date().toLocaleDateString("en"),gift:true}]
-    }));
+      inventory:[...(prev.inventory||[]).slice(-29),
+        {...gift.item,date:new Date().toLocaleDateString("en"),gift:true}]}));
     alert(`🎁 Received: ${gift.item?.name} from ${gift.from}!`);
   }
 
@@ -497,13 +554,13 @@ export default function TokenQuest() {
     @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
     @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
     @keyframes slideIn{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
-    @keyframes glow{0%,100%{box-shadow:0 0 8px #f59e0b30}50%{box-shadow:0 0 20px #f59e0b70}}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .btn{cursor:pointer;border:none;border-radius:8px;font-family:Georgia,serif;font-weight:700;transition:all 0.2s}
     .btn:hover{transform:translateY(-2px);filter:brightness(1.15)}
     .btn:active{transform:translateY(0)}
     .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;filter:none}
     .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;backdrop-filter:blur(4px)}
-    .tab{cursor:pointer;padding:7px 12px;border-radius:8px;font-size:12px;font-family:Georgia,serif;font-weight:700;border:none;transition:all 0.2s}
+    .tab{cursor:pointer;padding:7px 8px;border-radius:8px;font-size:11px;font-family:Georgia,serif;font-weight:700;border:none;transition:all 0.2s}
     input{background:#0d0d2b;border:1px solid #333;border-radius:8px;padding:9px 12px;color:#fde68a;font-family:Georgia,serif;outline:none;width:100%;box-sizing:border-box}
     input::placeholder{color:#444}
   `;
@@ -512,7 +569,7 @@ export default function TokenQuest() {
     minHeight:"100vh",
     background:"linear-gradient(135deg,#0a0a1a 0%,#0d0d2b 50%,#0a0a1a 100%)",
     fontFamily:"Georgia,serif",color:"#e8e0d0",
-    padding:"12px 12px 80px 12px",position:"relative",overflow:"hidden",
+    padding:"12px 12px 90px 12px",position:"relative",overflow:"hidden",
   };
 
   const stars = (
@@ -527,68 +584,126 @@ export default function TokenQuest() {
 
   function BottomNav() {
     return (
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50,
-        display:"flex",background:"rgba(5,5,20,0.97)",
-        borderTop:"1px solid #222",padding:"6px 12px 10px"}}>
-        {[
-          {key:"main",   emoji:"⚔️", label:"Fight"},
-          {key:"social", emoji:"🏆", label:"Social"},
-          {key:"profile",emoji:"👤", label:"Profile"},
-        ].map(({key,emoji,label})=>(
-          <button key={key} className="btn" onClick={()=>setScreen(key)} style={{
-            flex:1,padding:"6px 0",fontSize:10,
-            background:screen===key?"rgba(245,158,11,0.15)":"transparent",
-            color:screen===key?"#fde68a":"#444",
-            border:screen===key?"1px solid #f59e0b30":"1px solid transparent",
-            borderRadius:10,
-          }}>{emoji}<br/>{label}</button>
-        ))}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50}}>
+        {/* Banner Ad — above nav */}
+        <div style={{background:"rgba(0,0,0,0.9)",borderTop:"1px solid #1a1a1a",
+          padding:"6px 12px",textAlign:"center"}}>
+          <div style={{fontSize:8,color:"#333",marginBottom:2}}>Advertisement</div>
+          <div style={{fontSize:10,color:"#444"}}>[ Banner Ad — AdSense/Monetag ]</div>
+        </div>
+        {/* Nav tabs */}
+        <div style={{display:"flex",background:"rgba(5,5,20,0.97)",
+          borderTop:"1px solid #222",padding:"6px 8px 10px"}}>
+          {[
+            {key:"main",    emoji:"⚔️", label:"Fight"},
+            {key:"social",  emoji:"🏆", label:"Social"},
+            {key:"patches", emoji:"📋", label:"Patches"},
+            {key:"profile", emoji:"👤", label:"Profile"},
+          ].map(({key,emoji,label})=>(
+            <button key={key} className="btn" onClick={()=>setScreen(key)} style={{
+              flex:1,padding:"5px 0",fontSize:9,
+              background:screen===key?"rgba(245,158,11,0.15)":"transparent",
+              color:screen===key?"#fde68a":"#444",
+              border:screen===key?"1px solid #f59e0b30":"1px solid transparent",
+              borderRadius:8,
+            }}>{emoji}<br/>{label}</button>
+          ))}
+        </div>
       </div>
     );
   }
 
-  // ── REGISTER ──────────────────────────────────────────────────────────────
-  if (screen==="register") return (
-    <div style={wrap}>
+  // ── LOADING ───────────────────────────────────────────────────────────────
+  if (screen==="loading") return (
+    <div style={{...wrap,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <style>{css}</style>
       {stars}
-      <div style={{maxWidth:400,margin:"0 auto",position:"relative",zIndex:1,paddingTop:40}}>
-        <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:10,color:"#f59e0b",letterSpacing:4}}>⚔️ TOKEN QUEST ⚔️</div>
-          <h1 style={{color:"#fde68a",textShadow:"0 0 20px #f59e0b80",margin:"6px 0 4px",fontSize:26}}>CREATE HERO</h1>
-          <div style={{color:"#aaa",fontSize:12}}>Choose your name and class</div>
-        </div>
-        <div className="card" style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>👤 Username</div>
-          <input value={regName} onChange={e=>{setRegName(e.target.value);setRegError("");}}
-            onKeyDown={e=>e.key==="Enter"&&handleRegister()}
-            placeholder="e.g. DragonSlayer99" style={{fontSize:15,marginBottom:8}}/>
-          {regError&&<div style={{color:"#ef4444",fontSize:11,marginBottom:6}}>⚠️ {regError}</div>}
-          <div style={{fontSize:9,color:"#555"}}>Letters, numbers and _ only.</div>
-        </div>
-        <div className="card" style={{marginBottom:16}}>
-          <div style={{fontSize:11,color:"#aaa",marginBottom:10}}>🎭 Choose your class</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-            {AVATARS.map(av=>(
-              <div key={av.id} onClick={()=>setRegAvatar(av.id)} style={{
-                textAlign:"center",padding:"10px 6px",borderRadius:10,cursor:"pointer",
-                background:regAvatar===av.id?`${av.color}20`:"rgba(255,255,255,0.02)",
-                border:`2px solid ${regAvatar===av.id?av.color:"#333"}`,transition:"all 0.2s",
-              }}>
-                <div style={{fontSize:28}}>{av.emoji}</div>
-                <div style={{fontSize:10,fontWeight:700,color:regAvatar===av.id?av.color:"#aaa",marginTop:4}}>{av.name}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <button className="btn" onClick={handleRegister} style={{
-          width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",
-          color:"#000",padding:"13px",fontSize:15,
-        }}>⚔️ ENTER THE DUNGEON</button>
+      <div style={{textAlign:"center",position:"relative",zIndex:1}}>
+        <div style={{fontSize:48,animation:"spin 1s linear infinite"}}>⚔️</div>
+        <div style={{color:"#f59e0b",marginTop:12,fontSize:14}}>Loading Token Quest...</div>
+        <div style={{color:"#555",fontSize:11,marginTop:4}}>Connecting to cloud...</div>
       </div>
     </div>
   );
 
+  // ── AUTH (Register + Login) ───────────────────────────────────────────────
+  if (screen==="auth") return (
+    <div style={wrap}>
+      <style>{css}</style>
+      {stars}
+      <div style={{maxWidth:400,margin:"0 auto",position:"relative",zIndex:1,paddingTop:30}}>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontSize:10,color:"#f59e0b",letterSpacing:4}}>⚔️ TOKEN QUEST ⚔️</div>
+          <h1 style={{color:"#fde68a",textShadow:"0 0 20px #f59e0b80",margin:"6px 0 4px",fontSize:26}}>
+            {authMode==="register"?"CREATE HERO":"RECOVER ACCOUNT"}
+          </h1>
+          <div style={{color:"#aaa",fontSize:11}}>v{VERSION}</div>
+        </div>
+
+        {/* Toggle */}
+        <div style={{display:"flex",gap:6,marginBottom:16}}>
+          {[["register","⚔️ New Hero"],["login","🔑 Login"]].map(([m,l])=>(
+            <button key={m} className="tab" onClick={()=>setAuthMode(m)} style={{
+              flex:1,padding:"9px",
+              background:authMode===m?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",
+              color:authMode===m?"#fde68a":"#555",
+              border:authMode===m?"1px solid #f59e0b40":"1px solid #222",
+            }}>{l}</button>
+          ))}
+        </div>
+
+        {authMode==="register"&&(
+          <>
+            <div className="card" style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>👤 Username</div>
+              <input value={regName} onChange={e=>{setRegName(e.target.value);setRegError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleRegister()}
+                placeholder="e.g. DragonSlayer99" style={{fontSize:15,marginBottom:8}}/>
+              {regError&&<div style={{color:"#ef4444",fontSize:11,marginBottom:4}}>⚠️ {regError}</div>}
+              <div style={{fontSize:9,color:"#555"}}>Letters, numbers and _ only. Saved to cloud.</div>
+            </div>
+            <div className="card" style={{marginBottom:16}}>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:10}}>🎭 Choose your class</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {AVATARS.map(av=>(
+                  <div key={av.id} onClick={()=>setRegAvatar(av.id)} style={{
+                    textAlign:"center",padding:"10px 6px",borderRadius:10,cursor:"pointer",
+                    background:regAvatar===av.id?`${av.color}20`:"rgba(255,255,255,0.02)",
+                    border:`2px solid ${regAvatar===av.id?av.color:"#333"}`,transition:"all 0.2s",
+                  }}>
+                    <div style={{fontSize:28}}>{av.emoji}</div>
+                    <div style={{fontSize:10,fontWeight:700,
+                      color:regAvatar===av.id?av.color:"#aaa",marginTop:4}}>{av.name}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button className="btn" onClick={handleRegister} style={{
+              width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",
+              color:"#000",padding:"13px",fontSize:15,
+            }}>⚔️ ENTER THE DUNGEON</button>
+          </>
+        )}
+
+        {authMode==="login"&&(
+          <div className="card">
+            <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>👤 Your Username</div>
+            <input value={loginName} onChange={e=>{setLoginName(e.target.value);setLoginError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+              placeholder="Enter your username..." style={{fontSize:15,marginBottom:8}}/>
+            {loginError&&<div style={{color:"#ef4444",fontSize:11,marginBottom:8}}>⚠️ {loginError}</div>}
+            <div style={{fontSize:9,color:"#555",marginBottom:12}}>
+              Your account is saved in the cloud. Enter your username to recover it on any device.
+            </div>
+            <button className="btn" onClick={handleLogin} style={{
+              width:"100%",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",
+              color:"#fff",padding:"13px",fontSize:15,
+            }}>🔑 LOAD MY ACCOUNT</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
   // ── MAIN FIGHT SCREEN ─────────────────────────────────────────────────────
   if (screen==="main") return (
     <div style={wrap}>
@@ -603,15 +718,15 @@ export default function TokenQuest() {
               width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",
               border:`2px solid ${avatar.color}60`}}>{avatar.emoji}</div>
             <div>
-              <div style={{fontSize:9,color:"#f59e0b",letterSpacing:2}}>TOKEN QUEST</div>
+              <div style={{fontSize:9,color:"#f59e0b",letterSpacing:2}}>TOKEN QUEST v{VERSION}</div>
               <div style={{fontSize:15,fontWeight:700,color:"#fde68a"}}>{state.username}</div>
               <div style={{fontSize:9,color:"#a78bfa",fontStyle:"italic"}}>{title}</div>
             </div>
           </div>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:12,color:"#fde68a",fontWeight:700}}>Lv {level}</div>
-            <div style={{fontSize:10,color:"#f59e0b"}}>Boss #{state.bossIndex}</div>
-            <div style={{fontSize:10,color:"#aaa"}}>🪙 {state.tokens} tokens</div>
+            <div style={{fontSize:10,color:"#ef4444"}}>Boss #{state.bossIndex}</div>
+            <div style={{fontSize:10,color:"#aaa"}}>🪙 {state.tokens}</div>
           </div>
         </div>
 
@@ -626,70 +741,70 @@ export default function TokenQuest() {
         </div>
 
         {/* Energy */}
-        <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={Math.max(0,fullMs)}/>
+        <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={fullMs}/>
 
         {/* Boss Card */}
-        {bossHp!==null&&(
-          <div className="card" style={{marginBottom:10,border:"1px solid #ef444425",background:"rgba(239,68,68,0.04)"}}>
-            <BossHPBar
-              current={combatResult==="victory"?0:bossHp}
-              max={state.bossIndex-(combatResult==="victory"?1:0)}
-              name={`Boss #${state.bossIndex-(combatResult==="victory"?1:0)}`}
-              emoji={["👹","💀","🧌","🧛","👿","🌑","😈","☠️"][(state.bossIndex-(combatResult==="victory"?1:0))%8]}
-            />
+        <div className="card" style={{marginBottom:10,border:"1px solid #ef444425",background:"rgba(239,68,68,0.04)"}}>
+          <BossHPBar
+            current={combatResult==="victory"?0:(state.currentBossHp||state.bossIndex)}
+            max={state.bossIndex}
+            name={`Boss #${state.bossIndex}`}
+            emoji={["👹","💀","🧌","🧛","👿","🌑","😈","☠️"][state.bossIndex%8]}
+          />
 
-            {/* Combat Log */}
-            <div style={{minHeight:50,marginBottom:10}}>
-              {!combatLog.length&&!combatResult&&(
-                <div style={{textAlign:"center",color:"#555",fontSize:11,padding:"8px 0"}}>Attack the boss!</div>
-              )}
-              {combatLog.map((line,i)=>(
-                <div key={i} style={{fontSize:11,color:i===0?"#fde68a":"#555",marginBottom:2,
-                  animation:i===0?"slideIn 0.2s ease":"none"}}>{line}</div>
-              ))}
-            </div>
-
-            {/* Drop result */}
-            {combatResult==="victory"&&showDrop&&dropResult&&(
-              <div style={{marginBottom:10,padding:10,background:"rgba(34,197,94,0.08)",
-                border:"1px solid #22c55e30",borderRadius:8,animation:"slideIn 0.3s ease",textAlign:"center"}}>
-                <div style={{fontSize:13,color:"#22c55e",fontWeight:700,marginBottom:4}}>
-                  ⚔️ VICTORY! +{(state.bossIndex-1)*10} XP +1 🪙
-                </div>
-                {dropResult.type==="attacks"&&(
-                  <div style={{fontSize:12,color:"#f59e0b"}}>⚡ +{dropResult.amount} energy!</div>
-                )}
-                {dropResult.type==="item"&&dropResult.item&&(
-                  <div>
-                    <div style={{fontSize:22}}>{dropResult.item.emoji}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:RARITY_COLORS[dropResult.item.rarity]}}>{dropResult.item.name}</div>
-                    <RarityBadge rarity={dropResult.item.rarity}/>
-                    <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Added to inventory!</div>
-                  </div>
-                )}
+          {/* Combat Log */}
+          <div style={{minHeight:50,marginBottom:10}}>
+            {!combatLog.length&&!combatResult&&(
+              <div style={{textAlign:"center",color:"#555",fontSize:11,padding:"8px 0"}}>
+                ⚔️ Attack the boss!
               </div>
             )}
+            {combatLog.map((line,i)=>(
+              <div key={i} style={{fontSize:11,color:i===0?"#fde68a":"#555",
+                marginBottom:2,animation:i===0?"slideIn 0.2s ease":"none"}}>{line}</div>
+            ))}
+          </div>
 
-            {/* Buttons */}
-            <div style={{display:"flex",gap:8}}>
-              {!combatResult?(
-                <button className="btn" onClick={attack} disabled={currentEnergy<1} style={{
-                  flex:1,
-                  background:currentEnergy>0?"linear-gradient(135deg,#ef4444,#b91c1c)":"#333",
-                  color:"#fff",padding:"14px",fontSize:16,letterSpacing:1,
-                }}>⚔️ ATTACK{currentEnergy<1?" (No Energy)":""}</button>
-              ):(
-                <button className="btn" onClick={nextBoss} style={{
-                  flex:1,background:"linear-gradient(135deg,#22c55e,#16a34a)",
-                  color:"#fff",padding:"14px",fontSize:14,
-                }}>➡️ Next Boss #{state.bossIndex}</button>
+          {/* Victory drop */}
+          {combatResult==="victory"&&showDrop&&dropResult&&(
+            <div style={{marginBottom:10,padding:10,background:"rgba(34,197,94,0.08)",
+              border:"1px solid #22c55e30",borderRadius:8,animation:"slideIn 0.3s ease",textAlign:"center"}}>
+              <div style={{fontSize:13,color:"#22c55e",fontWeight:700,marginBottom:4}}>
+                ⚔️ VICTORY! +{(state.bossIndex-1)*10} XP +1 🪙
+              </div>
+              {dropResult.type==="attacks"&&(
+                <div style={{fontSize:12,color:"#f59e0b"}}>⚡ +{dropResult.amount} energy!</div>
+              )}
+              {dropResult.type==="item"&&dropResult.item&&(
+                <div>
+                  <div style={{fontSize:22}}>{dropResult.item.emoji}</div>
+                  <div style={{fontSize:11,fontWeight:700,
+                    color:RARITY_COLORS[dropResult.item.rarity]}}>{dropResult.item.name}</div>
+                  <RarityBadge rarity={dropResult.item.rarity}/>
+                  <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Added to inventory!</div>
+                </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Attack / Next buttons */}
+          {!combatResult?(
+            <button className="btn" onClick={attack} disabled={currentEnergy<1} style={{
+              width:"100%",
+              background:currentEnergy>0?"linear-gradient(135deg,#ef4444,#b91c1c)":"#333",
+              color:"#fff",padding:"14px",fontSize:16,letterSpacing:1,
+            }}>⚔️ ATTACK{currentEnergy<1?" (No Energy)":""}</button>
+          ):(
+            <button className="btn" onClick={nextBoss} style={{
+              width:"100%",background:"linear-gradient(135deg,#22c55e,#16a34a)",
+              color:"#fff",padding:"14px",fontSize:14,
+            }}>➡️ Next Boss #{state.bossIndex}</button>
+          )}
+        </div>
 
         {/* Watch Ad */}
-        <div className="card" style={{marginBottom:10,background:"rgba(245,158,11,0.04)",border:"1px solid #f59e0b20"}}>
+        <div className="card" style={{marginBottom:10,background:"rgba(245,158,11,0.04)",
+          border:"1px solid #f59e0b20"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <div style={{fontSize:11,color:"#f59e0b",fontWeight:700}}>📺 Watch Ad</div>
@@ -698,12 +813,15 @@ export default function TokenQuest() {
             {watchingAd?(
               <div style={{textAlign:"center"}}>
                 <div style={{fontSize:14,color:"#f59e0b",fontWeight:700}}>{adTimer}s</div>
-                <div style={{background:"#1a1a2e",borderRadius:4,height:4,width:70,overflow:"hidden",marginTop:3}}>
-                  <div style={{width:`${((30-adTimer)/30)*100}%`,background:"#f59e0b",height:"100%",borderRadius:4,transition:"width 1s"}}/>
+                <div style={{background:"#1a1a2e",borderRadius:4,height:4,width:70,
+                  overflow:"hidden",marginTop:3}}>
+                  <div style={{width:`${((30-adTimer)/30)*100}%`,background:"#f59e0b",
+                    height:"100%",borderRadius:4,transition:"width 1s"}}/>
                 </div>
               </div>
             ):(
-              <button className="btn" onClick={startWatchAd} disabled={currentEnergy>=MAX_ENERGY} style={{
+              <button className="btn" onClick={startWatchAd}
+                disabled={currentEnergy>=MAX_ENERGY} style={{
                 background:"linear-gradient(135deg,#f59e0b,#d97706)",
                 color:"#000",padding:"8px 16px",fontSize:12,
               }}>{currentEnergy>=MAX_ENERGY?"Full":"Watch"}</button>
@@ -711,14 +829,7 @@ export default function TokenQuest() {
           </div>
         </div>
 
-        {/* Banner Ad */}
-        <div style={{marginBottom:10,padding:"8px 12px",background:"rgba(255,255,255,0.02)",
-          border:"1px dashed #333",borderRadius:8,textAlign:"center"}}>
-          <div style={{fontSize:9,color:"#333"}}>Advertisement</div>
-          <div style={{fontSize:10,color:"#444",marginTop:2}}>[ Banner Ad ]</div>
-        </div>
-
-        {/* Inventory toggle */}
+        {/* Inventory */}
         <button className="btn" onClick={()=>setShowInventory(!showInventory)} style={{
           width:"100%",background:"rgba(168,85,247,0.08)",color:"#c084fc",
           border:"1px solid #a855f725",padding:"8px",fontSize:11,marginBottom:8,
@@ -736,7 +847,8 @@ export default function TokenQuest() {
                       borderRadius:8,padding:8,cursor:"pointer",textAlign:"center",
                     }}>
                       <div style={{fontSize:20}}>{item.emoji}</div>
-                      <div style={{fontSize:9,fontWeight:700,color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
+                      <div style={{fontSize:9,fontWeight:700,
+                        color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
                       <div style={{fontSize:8,color:"#555"}}>Tap to equip</div>
                     </div>
                   ))}
@@ -752,7 +864,8 @@ export default function TokenQuest() {
               border:`2px solid ${RARITY_COLORS[equipFrom.rarity]}`,
               boxShadow:`0 0 30px ${RARITY_COLORS[equipFrom.rarity]}40`}}>
               <div style={{fontSize:40,marginBottom:8}}>{equipFrom.emoji}</div>
-              <div style={{fontSize:16,fontWeight:700,color:RARITY_COLORS[equipFrom.rarity]}}>{equipFrom.name}</div>
+              <div style={{fontSize:16,fontWeight:700,
+                color:RARITY_COLORS[equipFrom.rarity]}}>{equipFrom.name}</div>
               <RarityBadge rarity={equipFrom.rarity}/>
               <div style={{fontSize:12,color:"#aaa",margin:"8px 0"}}>
                 Slot: {equipFrom.slot} | +{GEAR_DAMAGE[equipFrom.rarity]} dmg
@@ -764,7 +877,7 @@ export default function TokenQuest() {
                   color:"#fff",padding:"10px",fontSize:12}}>✅ Equip</button>
                 <button className="btn" onClick={()=>setEquipFrom(null)} style={{
                   flex:1,background:"rgba(255,255,255,0.06)",color:"#aaa",
-                  border:"1px solid #333",padding:"10px",fontSize:12}}>✕ Cancel</button>
+                  border:"1px solid #333",padding:"10px",fontSize:12}}>✕</button>
               </div>
             </div>
           </div>
@@ -786,7 +899,7 @@ export default function TokenQuest() {
         <div style={{display:"flex",gap:5,marginBottom:10}}>
           {[["leaderboard","🏆 Top"],["friends","👥 Friends"],["inbox","🎁 Inbox"]].map(([k,l])=>(
             <button key={k} className="tab" onClick={()=>setSocialTab(k)} style={{
-              flex:1,fontSize:11,
+              flex:1,
               background:socialTab===k?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",
               color:socialTab===k?"#fde68a":"#555",
               border:socialTab===k?"1px solid #f59e0b40":"1px solid #222",
@@ -802,7 +915,9 @@ export default function TokenQuest() {
               {loadingLB?"⏳ Loading...":"🔄 Refresh Leaderboard"}
             </button>
             {leaderboard.length===0&&!loadingLB&&(
-              <div style={{textAlign:"center",color:"#444",fontSize:12,padding:20}}>No players yet. Be the first!</div>
+              <div style={{textAlign:"center",color:"#444",fontSize:12,padding:20}}>
+                No players yet. Be the first!
+              </div>
             )}
             {leaderboard.map((p,i)=>(
               <div key={p.username} className="card" style={{marginBottom:6,cursor:"pointer",
@@ -814,7 +929,7 @@ export default function TokenQuest() {
                     color:i<3?["#f59e0b","#aaa","#CD7F32"][i]:"#444"}}>
                     {i<3?["🥇","🥈","🥉"][i]:i+1}
                   </div>
-                  <div style={{fontSize:24}}>
+                  <div style={{fontSize:22}}>
                     {(AVATARS.find(a=>a.id===p.avatar)||AVATARS[0]).emoji}
                   </div>
                   <div style={{flex:1}}>
@@ -840,10 +955,12 @@ export default function TokenQuest() {
               <div style={{fontSize:11,color:"#aaa",marginBottom:7}}>➕ Add friend by username</div>
               <div style={{display:"flex",gap:8}}>
                 <input value={friendInput} onChange={e=>setFriendInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&addFriend()} placeholder="Exact username..."/>
+                  onKeyDown={e=>e.key==="Enter"&&addFriend()}
+                  placeholder="Exact username..."/>
                 <button className="btn" onClick={addFriend} style={{
                   background:"rgba(245,158,11,0.2)",color:"#fde68a",
-                  border:"1px solid #f59e0b40",padding:"9px 12px",fontSize:12,whiteSpace:"nowrap"}}>➕</button>
+                  border:"1px solid #f59e0b40",padding:"9px 12px",fontSize:12,
+                  whiteSpace:"nowrap"}}>➕</button>
               </div>
             </div>
             {!(state.friends||[]).length
@@ -854,7 +971,7 @@ export default function TokenQuest() {
                     <div key={name} className="card" style={{marginBottom:6,cursor:"pointer"}}
                       onClick={()=>loadFriendProfile(name)}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <div style={{fontSize:24}}>
+                        <div style={{fontSize:22}}>
                           {p?(AVATARS.find(a=>a.id===p.avatar)||AVATARS[0]).emoji:"👤"}
                         </div>
                         <div style={{flex:1}}>
@@ -865,8 +982,8 @@ export default function TokenQuest() {
                         </div>
                         <button className="btn" onClick={e=>{e.stopPropagation();setGiftTarget(name);}} style={{
                           background:"rgba(168,85,247,0.15)",color:"#c084fc",
-                          border:"1px solid #a855f730",padding:"5px 10px",fontSize:11}}>
-                          🎁<br/><span style={{fontSize:9}}>−100🪙</span>
+                          border:"1px solid #a855f730",padding:"5px 8px",fontSize:10}}>
+                          🎁<br/><span style={{fontSize:8}}>−100🪙</span>
                         </button>
                       </div>
                       {giftTarget===name&&(
@@ -886,7 +1003,7 @@ export default function TokenQuest() {
                             </button>
                             <button className="btn" onClick={()=>setGiftTarget(null)} style={{
                               background:"rgba(255,255,255,0.05)",color:"#aaa",
-                              border:"1px solid #333",padding:"8px 12px",fontSize:12}}>✕</button>
+                              border:"1px solid #333",padding:"8px 10px",fontSize:12}}>✕</button>
                           </div>
                           {giftMsg&&<div style={{fontSize:11,color:"#f59e0b",marginTop:6}}>{giftMsg}</div>}
                         </div>
@@ -911,9 +1028,11 @@ export default function TokenQuest() {
               <div key={i} className="card" style={{marginBottom:8,
                 border:"1px solid #a855f740",background:"rgba(168,85,247,0.05)"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{fontSize:32}}>{gift.item?.emoji||"🎁"}</div>
+                  <div style={{fontSize:30}}>{gift.item?.emoji||"🎁"}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#c084fc"}}>{gift.item?.name||"Mystery Item"}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#c084fc"}}>
+                      {gift.item?.name||"Mystery Item"}
+                    </div>
                     <div style={{fontSize:10,color:"#aaa"}}>From: <strong>{gift.from}</strong></div>
                     {gift.item?.rarity&&<RarityBadge rarity={gift.item.rarity}/>}
                   </div>
@@ -931,14 +1050,48 @@ export default function TokenQuest() {
       <BottomNav/>
     </div>
   );
+
+  // ── PATCH NOTES ───────────────────────────────────────────────────────────
+  if (screen==="patches") return (
+    <div style={wrap}>
+      <style>{css}</style>
+      {stars}
+      <div style={{maxWidth:480,margin:"0 auto",position:"relative",zIndex:1}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:10,color:"#f59e0b",letterSpacing:3}}>📋 PATCH NOTES</div>
+          <div style={{fontSize:11,color:"#555",marginTop:4}}>Token Quest — Version History</div>
+        </div>
+        {PATCH_NOTES.map((patch,i)=>(
+          <div key={patch.version} className="card" style={{marginBottom:12,
+            border:i===0?"1px solid #f59e0b40":"1px solid rgba(255,255,255,0.08)",
+            background:i===0?"rgba(245,158,11,0.04)":"rgba(255,255,255,0.02)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",
+              alignItems:"center",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {i===0&&<span style={{fontSize:9,background:"#f59e0b",color:"#000",
+                  padding:"1px 6px",borderRadius:4,fontWeight:700}}>LATEST</span>}
+                <span style={{fontSize:16,fontWeight:700,color:"#fde68a"}}>v{patch.version}</span>
+              </div>
+              <span style={{fontSize:10,color:"#555"}}>{patch.date}</span>
+            </div>
+            {patch.changes.map((change,j)=>(
+              <div key={j} style={{fontSize:11,color:"#aaa",marginBottom:5,
+                paddingLeft:8,borderLeft:"2px solid #333",lineHeight:1.4}}>
+                {change}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <BottomNav/>
+    </div>
+  );
   // ── PROFILE ───────────────────────────────────────────────────────────────
   if (screen==="profile") return (
     <div style={wrap}>
       <style>{css}</style>
       {stars}
       <div style={{maxWidth:480,margin:"0 auto",position:"relative",zIndex:1}}>
-
-        {/* Hero Card */}
         <div className="card" style={{marginBottom:10,textAlign:"center",
           border:`1px solid ${avatar.color}40`,animation:"slideIn 0.4s ease"}}>
           <div style={{fontSize:64,marginBottom:4}}>{avatar.emoji}</div>
@@ -956,20 +1109,20 @@ export default function TokenQuest() {
             </div>
             <div>
               <div style={{fontSize:20,fontWeight:700,color:"#ef4444"}}>💀#{state.bossIndex}</div>
-              <div style={{fontSize:8,color:"#aaa"}}>Current Boss</div>
+              <div style={{fontSize:8,color:"#aaa"}}>Boss</div>
             </div>
             <div>
-              <div style={{fontSize:20,fontWeight:700,color:"#fbbf24"}}>🔥{state.streak}</div>
+              <div style={{fontSize:20,fontWeight:700,color:"#fbbf24"}}>🔥{state.streak||0}</div>
               <div style={{fontSize:8,color:"#aaa"}}>Streak</div>
             </div>
           </div>
           <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>
-            ⚔️ DMG: {totalDamage} | 🎯 Crit: {critChance}% | ⚡ {currentEnergy}/{MAX_ENERGY}
+            ⚔️ DMG: {totalDmg} | 🎯 Crit: {critChance}% | ⚡ {currentEnergy}/{MAX_ENERGY}
           </div>
           <StatBar label="XP" value={xi.progress} max={xi.total} color="#f59e0b"/>
         </div>
 
-        {/* Gear Slots */}
+        {/* Gear */}
         <div className="card" style={{marginBottom:10}}>
           <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🛡️ Equipped Gear</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
@@ -978,13 +1131,14 @@ export default function TokenQuest() {
                 onEquip={()=>{
                   const items=(state.inventory||[]).filter(i=>i&&i.slot===slot);
                   if (!items.length) return;
-                  const best=items.sort((a,b)=>RARITY_ORDER.indexOf(b.rarity)-RARITY_ORDER.indexOf(a.rarity))[0];
+                  const best=items.sort((a,b)=>
+                    RARITY_ORDER.indexOf(b.rarity)-RARITY_ORDER.indexOf(a.rarity))[0];
                   equipItem(best);
                 }}/>
             ))}
           </div>
           <div style={{fontSize:9,color:"#555",marginTop:6,textAlign:"center"}}>
-            Tap a slot to auto-equip best item
+            Tap slot to auto-equip best item
           </div>
         </div>
 
@@ -994,7 +1148,7 @@ export default function TokenQuest() {
             🎒 Inventory ({(state.inventory||[]).length} items)
           </div>
           {!(state.inventory||[]).length
-            ? <div style={{color:"#444",fontSize:12,textAlign:"center"}}>No items yet. Defeat bosses!</div>
+            ? <div style={{color:"#444",fontSize:12,textAlign:"center"}}>No items yet!</div>
             : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
                 {(state.inventory||[]).slice().reverse().slice(0,12).map((item,i)=>(
                   <div key={i} onClick={()=>equipItem(item)} style={{
@@ -1003,33 +1157,51 @@ export default function TokenQuest() {
                     borderRadius:8,padding:8,cursor:"pointer",textAlign:"center",
                   }}>
                     <div style={{fontSize:20}}>{item.emoji}</div>
-                    <div style={{fontSize:9,fontWeight:700,color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
+                    <div style={{fontSize:9,fontWeight:700,
+                      color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
                     <div style={{fontSize:8,color:"#555"}}>+{GEAR_DAMAGE[item.rarity]} dmg</div>
                   </div>
                 ))}
               </div>}
         </div>
 
-        {/* Energy timer in profile */}
+        {/* Energy */}
         <div className="card" style={{marginBottom:10}}>
-          <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={Math.max(0,fullMs)}/>
+          <EnergyBar current={currentEnergy} max={MAX_ENERGY} nextMs={nextMs} fullMs={fullMs}/>
         </div>
 
+        {/* Cloud status */}
         <div style={{textAlign:"center",marginBottom:8}}>
+          <div style={{fontSize:9,color:"#333",marginBottom:6}}>
+            ☁️ Account saved to cloud — recoverable on any device via Login
+          </div>
           <button className="btn" onClick={()=>{
-            if(confirm("Reset everything? You will lose all progress!")) {
+            if(confirm("Log out? Your data is saved in the cloud. Use Login to recover it.")) {
+              saveCache(null);
+              localStorage.removeItem("tq_cache");
               setState(initialState);
-              saveLocal(initialState);
-              setScreen("register");
+              setScreen("auth");
             }
-          }} style={{background:"transparent",color:"#333",fontSize:10,border:"1px solid #222",padding:"3px 10px"}}>
-            reset account
+          }} style={{background:"transparent",color:"#555",fontSize:10,
+            border:"1px solid #333",padding:"4px 14px",marginRight:8}}>
+            🚪 Log Out
+          </button>
+          <button className="btn" onClick={()=>{
+            if(confirm("Delete account permanently? This cannot be undone!")) {
+              localStorage.removeItem("tq_cache");
+              setState(initialState);
+              setScreen("auth");
+            }
+          }} style={{background:"transparent",color:"#333",fontSize:10,
+            border:"1px solid #222",padding:"4px 14px"}}>
+            🗑️ Delete
           </button>
         </div>
       </div>
       <BottomNav/>
     </div>
   );
+
   // ── VIEW EXTERNAL PROFILE ─────────────────────────────────────────────────
   if (screen==="viewProfile"&&viewProfile) {
     const vAvatar=AVATARS.find(a=>a.id===viewProfile.avatar)||AVATARS[0];
@@ -1047,7 +1219,9 @@ export default function TokenQuest() {
             <div style={{fontSize:56}}>{vAvatar.emoji}</div>
             <h2 style={{color:"#fde68a",margin:"4px 0 2px",fontSize:20}}>{viewProfile.username}</h2>
             <div style={{color:vAvatar.color,fontSize:10,marginBottom:4}}>{vAvatar.name}</div>
-            <div style={{color:"#a78bfa",fontSize:11,fontStyle:"italic",marginBottom:10}}>{viewProfile.title}</div>
+            <div style={{color:"#a78bfa",fontSize:11,fontStyle:"italic",marginBottom:10}}>
+              {viewProfile.title}
+            </div>
             <div style={{display:"flex",justifyContent:"center",gap:14,marginBottom:8}}>
               <div>
                 <div style={{fontSize:18,fontWeight:700,color:"#fde68a"}}>Lv {viewProfile.level}</div>
@@ -1068,7 +1242,6 @@ export default function TokenQuest() {
             </div>
           </div>
 
-          {/* Their Gear */}
           {viewProfile.gear&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🛡️ Their Gear</div>
@@ -1080,7 +1253,6 @@ export default function TokenQuest() {
             </div>
           )}
 
-          {/* Their latest items */}
           {viewProfile.inventory?.length>0&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#aaa",marginBottom:8}}>🎒 Latest items</div>
@@ -1092,14 +1264,14 @@ export default function TokenQuest() {
                     borderRadius:8,padding:8,textAlign:"center",
                   }}>
                     <div style={{fontSize:18}}>{item.emoji}</div>
-                    <div style={{fontSize:9,fontWeight:700,color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
+                    <div style={{fontSize:9,fontWeight:700,
+                      color:RARITY_COLORS[item.rarity]}}>{item.name}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Gift button */}
           {(state.friends||[]).includes(viewProfile.username)&&(
             <div className="card" style={{marginBottom:10}}>
               <div style={{fontSize:11,color:"#c084fc",marginBottom:6}}>
@@ -1115,7 +1287,6 @@ export default function TokenQuest() {
               </button>
             </div>
           )}
-
         </div>
         <BottomNav/>
       </div>
