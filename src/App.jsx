@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/App.jsx << 'ENDOFFILE'
 import React, { useState, useEffect, useRef } from "react";
 
 // ─── VERSION ──────────────────────────────────────────────────────────────────
