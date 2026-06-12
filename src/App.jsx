@@ -1216,5 +1216,3 @@ export default function TokenQuest() {
 
   return null;
 }
-ENDOFFILE
-echo "Done"
